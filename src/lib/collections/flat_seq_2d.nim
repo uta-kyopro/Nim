@@ -13,7 +13,7 @@ when not declared FlatSeq2DModule:  # 2次元配列を1次元で管理する
     proc initFlatSeq2D[T](v: seq[T], row: Natural): FlatSeq2D[T] =
         result.data = v
         result.row = row
-        result.col = result.data.len//row
+        result.col = result.data.len div row
     proc len(self: FlatSeq2D): int = self.data.len
     proc fill[T](self: var FlatSeq2D[T], v: T) = self.data.fill(v)
     proc `[]`[T](self: FlatSeq2D[T], i, j: Natural): lent T = 

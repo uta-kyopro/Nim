@@ -24,3 +24,9 @@ when not declared BitSetModule:
     proc `|=`(b1, b2:var BitSet) =
         for i in 0..<b1.data.len:
             b1.data[i] = b1.data[i] or b2.data[i]
+    proc `&=`(b1, b2:var BitSet) =
+        for i in 0..<b1.data.len:
+            b1.data[i] = b1.data[i] and b2.data[i]
+    proc `^=`(b1, b2:var BitSet) =
+        for i in 0..<b1.data.len:
+            b1.data[i] = b1.data[i] xor b2.data[i]
