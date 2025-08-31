@@ -10,7 +10,6 @@ iterator product(ma, repeat: int): seq[int]=
     block loop:
         while i<repeat:
             yield res
-
             i = 0
             while res[i]>=ma-1:
                 res[i] = 0
