@@ -59,9 +59,9 @@ when not declared SimdRandModule:       # 乱数生成高速化
     # 0..ma の範囲を返す
     proc rand(r: var SimdRng, ma: int): int =
         if ma<=0: return 0
-        if ((ma+1) & ma) == 0:  # 2冪はマスクで高速化
+        if ((ma+1) and ma) == 0:  # 2冪はマスクで高速化
             if r.i == 0: r.next()
-            result = cast[int](r.data[r.i]) & ma
+            result = cast[int](r.data[r.i]) and ma
             r.i = (r.i+1) and 7
         else:
             let max32 = cast[uint32](ma+1)
