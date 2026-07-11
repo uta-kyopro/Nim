@@ -5,6 +5,7 @@ include ../header
 
 # 2次元累積和
 when not declared CumulativeSum2DModule:
+    const CumulativeSum2DModule = true
     # 1-indexで構成された2次元配列を累積和へ変換
     proc cumsum(data:var seq[seq[int]]) =
         for i in 1..<data.len:

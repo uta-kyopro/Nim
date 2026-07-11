@@ -4,6 +4,7 @@ include ../header
 
 # bit区切りでuintに複数値を格納, 取り出し
 when not declared BitPackingModule:
+    const BitPackingModule = true
     const bitMask64: seq[uint64] = (0..32).toSeq().mapIt(toMask[uint64](0..<it))
     const bitMask32: seq[uint32] = (0..16).toSeq().mapIt(toMask[uint32](0..<it))
     const bitMask16: seq[uint16] = (0..8).toSeq().mapIt(toMask[uint16](0..<it))

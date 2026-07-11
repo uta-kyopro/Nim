@@ -4,6 +4,7 @@ include ../header
 
 # 両端取り出しできるHeapQueue
 when not declared IntervalHeapModule:
+    const IntervalHeapModule = true
     # 通常のHeapQueueと比べて2~3倍遅い
     type IntervalHeap[T] = object
         data: seq[T]
@@ -65,33 +66,16 @@ when not declared IntervalHeapModule:
         if self.data.len == 0:
             self.push(x)
             return x
-
-        if self.data.len < 2:
-            result = self.data[0]
-            self.data[0] = x
-            return
-
-        result = self.data[1]
-        self.data[1] = x
-        var k = 1
-        if self.data[0] < self.data[1]:
-            swap(self.data[0], self.data[1])
-            k = 0
-        self.up(self.down(k), k)
+        result = self.pop_min()
+        self.push(x)
 
     # 最大値を削除して x を挿入し，削除した値を返す O(log n)
     proc replace_max[T](self:var IntervalHeap[T], x: T): T {.discardable.}=
         if self.data.len == 0:
             self.push(x)
             return x
-
-        result = self[0]
-        self.data[0] = x
-        var k = 0
-        if self.data.len >= 2 and self.data[0] < self.data[1]:
-            swap(self.data[0], self.data[1])
-            k = 1
-        self.up(self.down(k), k)
+        result = self.pop_max()
+        self.push(x)
 
     proc empty[T](self: IntervalHeap[T]): bool =
         return self.data.len == 0

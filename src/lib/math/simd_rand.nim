@@ -4,6 +4,7 @@ include ../header
 
 # SIMDを使った8並列乱数生成(標準の約2倍程度の速度)
 when not declared SimdRandModule:       # 乱数生成高速化
+    const SimdRandModule = true
     {.passC: "-mavx2".}
     {.push header: "immintrin.h".}
     type M256i {.importc: "__m256i".} = object

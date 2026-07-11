@@ -3,6 +3,7 @@ include ../header
 
 # 2 次元配列を 1 次元のシーケンスで内部的に保持
 when not declared FlatSeq2DModule:  # 2次元配列を1次元で管理する
+    const FlatSeq2DModule = true
     type FlatSeq2D[T] = object
         data: seq[T]
         row, col: int   # 行数, 列数
@@ -11,6 +12,10 @@ when not declared FlatSeq2DModule:  # 2次元配列を1次元で管理する
         result.col = col
         result.row = row
     proc initFlatSeq2D[T](v: seq[T], row: Natural): FlatSeq2D[T] =
+        when defined(debug):
+            assert row > 0, "FlatSeq2D row count must be positive"
+            assert v.len mod row == 0,
+                "FlatSeq2D data length must be divisible by its row count"
         result.data = v
         result.row = row
         result.col = result.data.len div row
