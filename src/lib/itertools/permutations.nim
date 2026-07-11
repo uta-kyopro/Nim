@@ -30,19 +30,24 @@ include ../header
 
 
 # 0..<ma から r 個取り出した「順列」（重複なし、長さ r）
-iterator permutations(ma, r: int): seq[int] =
-    var comb = (0..<r).toSeq()
-    var cur  = comb
-    while true:
-        yield cur
-        while nextPermutation(cur):
-            yield cur
-        var i = r - 1
-        while i >= 0 and comb[i] == i+ma-r: 
-            dec i
-        if i < 0: break
-        inc comb[i]
-        for j in i+1 ..< r: 
-            comb[j] = comb[j-1] + 1
-        cur = comb                      # 新しい組合せで順列を回す
+when not declared PermutationsModule:
+    const PermutationsModule = true
+    iterator permutations(ma, r: int): seq[int] =
+        if r == 0 and ma >= 0:
+            yield @[]
+        elif ma >= 0 and r > 0 and r <= ma:
+            var comb = (0..<r).toSeq()
+            var cur  = comb
+            while true:
+                yield cur
+                while nextPermutation(cur):
+                    yield cur
+                var i = r - 1
+                while i >= 0 and comb[i] == i+ma-r:
+                    dec i
+                if i < 0: break
+                inc comb[i]
+                for j in i+1 ..< r:
+                    comb[j] = comb[j-1] + 1
+                cur = comb                      # 新しい組合せで順列を回す
 

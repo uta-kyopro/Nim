@@ -5,6 +5,7 @@ include ../header
 
 # Miller-Rabin法による素数判定
 when not declared MillerRabinTestModule:
+    const MillerRabinTestModule = true
     # a * b % mod (128bit)
     proc mul128(a, b, m:int):int {.importcpp: "(__int128)(#) * (#) % (#)", nodecl.}
     proc pow128(a, b, m:int):int =
@@ -42,4 +43,3 @@ when not declared MillerRabinTestModule:
                         break ok
                 return false
         return true
-    
