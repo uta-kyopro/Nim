@@ -49,6 +49,22 @@ list.reverse(0, 2)
 echo list.delete(0)
 ```
 
+### Object Pool
+
+`object_pool.nim` は、[thun-c/thunder_libraryのObjectPool](https://github.com/thun-c/thunder_library/blob/main/thunder/lib/skip_beam.cpp)を参考にした整数index型プールです。削除したindexをLIFOで再利用し、要素を連続した `seq` に保持します。
+
+### KD-tree
+
+`tree/kd_tree.nim` は静的次元の点集合について、最近傍・k近傍・半径・直方体検索を提供します。検索結果は入力配列でのindexを保持します。
+
+### Sorted containers
+
+`sorted_containers.nim` は√分割による `SortedSet`、`SortedMultiSet`、`SortedDict` を提供します。ソート順の列挙、lower/upper bound、indexアクセスに対応します。
+
+### Minimum-cost flow
+
+`flow/`には共通APIの最小費用流を3方式収録しています。`V`を頂点数、`E`を辺数、`I`を増加路を流す回数とすると、Heap Primal-Dualは `O(I E log V)` で疎グラフ向け、Dense Primal-Dualは `O(I(V²+E))` で密グラフ向け、Bellman–Ford版は `O(I V E)` で負辺対応の参照実装向けです。Primal-Dualの初期残余グラフに負辺がある場合は、初期ポテンシャル計算として `O(VE)` が加わります。
+
 ## テスト
 
 Windowsではリポジトリ直下から次を実行します。
@@ -64,6 +80,10 @@ tests\run.cmd
 - Deque、BitSet、ビットパッキング、二次元配列
 - Implicit Treapの挿入・削除・更新・区間反転とランダム差分テスト
 - Unrolled Linked Listと`seq`のランダム差分テスト
+- Object Poolのindex再利用とdebug検査
+- SortedSet、SortedMultiSet、SortedDictのランダム差分テスト
+- KD-treeと全点走査のランダム差分テスト
+- 3方式の最小費用流について、既知ケース・境界条件・slope・辺状態・独立な全列挙とのランダム差分テスト
 - IntervalHeapとソート済み配列のランダム差分テスト
 - 二次元累積和、Miller–Rabin、SIMD乱数
 - `memoized` のキャッシュとリセット
