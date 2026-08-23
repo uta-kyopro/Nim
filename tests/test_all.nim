@@ -83,11 +83,29 @@ suite "collections":
     check q.data.len - 1 == 3
     expect AssertionDefect:
       discard q.popFirst()
+    expect AssertionDefect:
+      q.shiftForward()
     q.addLast(1)
     q.addLast(2)
     q.addLast(3)
     expect AssertionDefect:
       q.addLast(4)
+
+  test "array deque shifts forward":
+    var q = initArrayDeque[int](8)
+    q.addLast(1)
+    q.addLast(2)
+    q.addLast(3)
+    q.shiftForward()
+    check toSeq(q.items) == @[2, 3, 1]
+
+  test "array deque shifts forward after wraparound":
+    var q = initArrayDeque[int](8)
+    for i in 0..<6: q.addLast(i)
+    for i in 0..<4: discard q.popFirst()
+    for i in 6..<10: q.addLast(i)
+    q.shiftForward()
+    check toSeq(q.items) == @[5, 6, 7, 8, 9, 4]
 
   test "bitset masks unused bits and crosses old size limit":
     var zero = initBitSet(2001)

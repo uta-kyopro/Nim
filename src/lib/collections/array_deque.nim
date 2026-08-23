@@ -7,39 +7,44 @@ when not declared ArrayDequeModule:
     # Nは2冪。通常ビルドでは空からの取得と容量超過は未定義動作。
     type ArrayDeque[N: static[int], T] = object
         data: array[N, T]
-        head, tail, mask: int
+        head, tail: int
     proc initArrayDeque[T](N: static[int]): ArrayDeque[N, T] = 
         static:
             doAssert N >= 2 and (N and (N - 1)) == 0,
                 "ArrayDeque size N must be a power of two and at least 2"
-        result.mask = N-1
     proc len[N, T](self: ArrayDeque[N, T]): int =
-        (self.tail-self.head+N) and self.mask
+        (self.tail-self.head+N) and (N - 1)
     proc clear(self: var ArrayDeque) =
         self.head = self.tail
     proc `[]`[N, T](self: ArrayDeque[N, T], i: Natural): lent T =
-        self.data[(self.head+i) and self.mask]
+        self.data[(self.head+i) and (N - 1)]
     proc `[]=`[N, T](self:var ArrayDeque[N, T], i: Natural, v: T) =
-        self.data[(self.head+i) and self.mask] = v
+        self.data[(self.head+i) and (N - 1)] = v
     proc addFirst[N, T](self:var ArrayDeque[N, T], v: T) =
         when defined(debug):
             assert self.len < N - 1, "ArrayDeque capacity exceeded"
-        self.head = (self.head+self.mask) and self.mask
+        self.head = (self.head+N-1) and (N - 1)
         self.data[self.head] = v
     proc addLast[N, T](self:var ArrayDeque[N, T], v: T) =
         when defined(debug):
             assert self.len < N - 1, "ArrayDeque capacity exceeded"
         self.data[self.tail] = v
-        self.tail = (self.tail+1) and self.mask
+        self.tail = (self.tail+1) and (N - 1)
+    proc shiftForward[N, T](self: var ArrayDeque[N, T]) {.inline.} =
+        when defined(debug):
+            assert self.len > 0, "cannot shift an empty ArrayDeque"
+        self.data[self.tail] = self.data[self.head]
+        self.head = (self.head+1) and (N - 1)
+        self.tail = (self.tail+1) and (N - 1)
     proc popFirst[N, T](self:var ArrayDeque[N, T]): T {.discardable.}=
         when defined(debug):
             assert self.len > 0, "cannot pop from an empty ArrayDeque"
         result = self.data[self.head]
-        self.head = (self.head+1) and self.mask
+        self.head = (self.head+1) and (N - 1)
     proc popLast[N, T](self:var ArrayDeque[N, T]): T {.discardable.}=
         when defined(debug):
             assert self.len > 0, "cannot pop from an empty ArrayDeque"
-        self.tail = (self.tail+self.mask) and self.mask
+        self.tail = (self.tail+N-1) and (N - 1)
         result = self.data[self.tail]
     proc peakFirst[N, T](self: var ArrayDeque[N, T]): var T =
         when defined(debug):
@@ -48,7 +53,7 @@ when not declared ArrayDequeModule:
     proc peakLast[N, T](self: var ArrayDeque[N, T]): var T =
         when defined(debug):
             assert self.len > 0, "cannot peek into an empty ArrayDeque"
-        result = self.data[(self.tail+self.mask) and self.mask]
+        result = self.data[(self.tail+N-1) and (N - 1)]
     iterator items[N, T](self: ArrayDeque[N, T]): lent T =
         for i in 0..<self.len:
-            yield self.data[(self.head+i) and self.mask]
+            yield self.data[(self.head+i) and (N - 1)]
