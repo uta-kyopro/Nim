@@ -11,7 +11,10 @@ include ../src/lib/collections/interval_heap
 include ../src/lib/collections/implicit_treap
 include ../src/lib/collections/unrolled_linked_list
 include ../src/lib/collections/object_pool
+include ../src/lib/collections/persistent_stack
 include ../src/lib/collections/sorted_containers
+include ../src/lib/collections/stack
+include ../src/lib/collections/trie
 include ../src/lib/tree/kd_tree
 include ../src/lib/flow/min_cost_flow_heap
 include ../src/lib/flow/min_cost_flow_dense
@@ -106,6 +109,76 @@ suite "collections":
     for i in 6..<10: q.addLast(i)
     q.shiftForward()
     check toSeq(q.items) == @[5, 6, 7, 8, 9, 4]
+
+  test "fixed stack supports seq-like operations":
+    var stack = initStack[8, int]()
+    stack.add(1)
+    stack.push(2)
+    stack[^1] = 3
+    var value = 4
+    stack.swap_add(value)
+    check value == 0
+    check stack.len == 3
+    check stack[0] == 1
+    check stack[^1] == 4
+    check toSeq(stack.items) == @[1, 3, 4]
+    check stack.pop() == 4
+    stack.clear()
+    check stack.len == 0
+
+  test "persistent stack preserves branched versions":
+    let empty = initPersistentStack[int]()
+    let base = empty.push(1)
+    let left = base.push(2)
+    let right = base.emplace(3)
+    check empty.isEmpty
+    check base.top == 1
+    check left.top == 2
+    check right.top == 3
+    check left.get(1) == 1
+    check left.getAll() == @[2, 1]
+    check right.getAll() == @[3, 1]
+    check left.pop().getAll() == @[1]
+
+  test "persistent stack checks invalid access in debug builds":
+    let empty = initPersistentStack[int]()
+    expect AssertionDefect:
+      discard empty.top
+    expect AssertionDefect:
+      discard empty.pop()
+    expect AssertionDefect:
+      discard empty.get(0)
+
+  test "trie searches prefixes and lexicographic endpoints":
+    var trie = initTrie()
+    trie.insert("ab")
+    trie.insert("a")
+    trie.insert("abc")
+    trie.insert("B")
+    check trie.search("a")
+    check trie.search("abc")
+    check not trie.search("ac")
+    check trie.startsWith("ab")
+    check not trie.startsWith("ba")
+    check trie.getMinString() == "B"
+    check trie.getMaxString() == "abc"
+    check trie.totalCount == 4
+    check trie.nodeCount == 4
+
+  test "trie optionally rejects duplicate words":
+    var trie = initTrie()
+    check trie.insert("word", duplicate = false)
+    check not trie.insert("word", duplicate = false)
+    check trie.totalCount == 1
+    trie.insert("word")
+    check trie.totalCount == 2
+
+  test "trie checks endpoints when empty in debug builds":
+    let trie = initTrie()
+    expect AssertionDefect:
+      discard trie.getMinString()
+    expect AssertionDefect:
+      discard trie.getMaxString()
 
   test "bitset masks unused bits and crosses old size limit":
     var zero = initBitSet(2001)
