@@ -55,10 +55,19 @@ when not declared UserOperator:
     proc `min=`[T](x: var T, y: T) = (if x > y: x = y)  # 最小値代入
     proc `**`(x: SomeInteger, y: Natural): SomeInteger = x ^ y  # 整数累乗
     proc `**=`(x: var SomeInteger, y: Natural) = x = x ^ y      # 整数累乗
-    proc `%`(x: SomeInteger, y: SomeInteger): SomeInteger = (((x mod y) + y) mod y)
-    proc `%=`(x: var SomeInteger, y: SomeInteger) = x = x % y
-    proc `//`(x: SomeInteger, y: SomeInteger): SomeInteger = ((x - (x%y)) div y)
-    proc `//=`(x: var SomeInteger, y: SomeInteger) = x = x // y # 負の無限大方向への丸め
+    proc `%`[T: SomeInteger](x, y: T): T =
+        result = x mod y
+        when T is SomeSignedInt:
+            if result != 0 and ((result < 0) != (y < 0)):
+                result += y
+    proc `%=`[T: SomeInteger](x: var T, y: T) = x = x % y
+    proc `//`[T: SomeInteger](x, y: T): T =
+        result = x div y
+        when T is SomeSignedInt:
+            let remainder = x mod y
+            if remainder != 0 and ((remainder < 0) != (y < 0)):
+                result.dec
+    proc `//=`[T: SomeInteger](x: var T, y: T) = x = x // y # 負の無限大方向への丸め
     proc `>>`(x: SomeInteger, y: int): SomeInteger = x shr y
     proc `<<`(x: SomeInteger, y: int): SomeInteger = x shl y
     proc `>>=`(x: var SomeInteger, y: int) = x = (x shr y)
@@ -76,7 +85,7 @@ when not declared UserOperator:
     proc `^`(x, y: SomeInteger): SomeInteger = x xor y
     proc `^=`(x: var SomeInteger, y: SomeInteger) = x = (x xor y)
     proc pop[T](s: var seq[T]): T {.inline, noSideEffect, discardable.} =
-        let L = s.len-1; result = s[L]; setLen(s, L)
+        system.pop(s)
     proc initHashSet[T]():Hashset[T] = initHashSet[T](0)
     proc clear[T](self:var Hashset[T]) = self = initHashSet[T](0)
 
