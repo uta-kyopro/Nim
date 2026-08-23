@@ -9,6 +9,7 @@ include ../src/lib/collections/bitpacking
 include ../src/lib/collections/flat_seq_2d
 include ../src/lib/collections/interval_heap
 include ../src/lib/collections/implicit_treap
+include ../src/lib/collections/indexed_set
 include ../src/lib/collections/unrolled_linked_list
 include ../src/lib/collections/object_pool
 include ../src/lib/collections/persistent_stack
@@ -21,6 +22,7 @@ include ../src/lib/flow/min_cost_flow_dense
 include ../src/lib/flow/min_cost_flow_bellman_ford
 include ../src/lib/math/miller_rabin
 include ../src/lib/math/simd_rand
+include ../src/lib/utils/timer
 
 import std/unittest
 
@@ -179,6 +181,43 @@ suite "collections":
       discard trie.getMinString()
     expect AssertionDefect:
       discard trie.getMaxString()
+
+  test "index set supports constant-time indexed removal":
+    var values = initIndexSet(8)
+    values.incl(2)
+    values.incl(5)
+    values.incl(2)
+    check values.len == 2
+    check values.find(2) == 0
+    check toSeq(values.items) == @[2, 5]
+    values.excl(2)
+    check 2 notin values
+    check values[0] == 5
+    values.clear()
+    check values.len == 0
+    check 5 notin values
+
+  test "indexed set supports arbitrary hashable values":
+    var values = initIndexedSet(["a", "b", "a"])
+    check values.len == 2
+    check values.find("b") == 1
+    values.excl("a")
+    check toSeq(values.items) == @["b"]
+    values.incl("c")
+    check values[1] == "c"
+    values.clear()
+    check values.len == 0
+    values.incl("d")
+    values.reset()
+    check values.len == 0
+
+  test "indexed sets check invalid indices in debug builds":
+    var bounded = initIndexSet(2)
+    expect AssertionDefect:
+      bounded.incl(2)
+    var generic = initIndexedSet[int]()
+    expect AssertionDefect:
+      discard generic[0]
 
   test "bitset masks unused bits and crosses old size limit":
     var zero = initBitSet(2001)
@@ -537,6 +576,44 @@ suite "dp and math":
     check a.rand(0) == 0
 
 suite "header helpers":
+  test "monotonic timer reports elapsed time and resets":
+    var timer = initTimer()
+    check timer.getTime_ns() >= 0
+    check timer.getTime() >= 0.0
+    check timer.elapsedNs() >= 0
+    check timer.elapsedSec() >= 0.0
+    check timer.ratio(1.0) >= 0.0
+    check timer.expired(0.0)
+    timer.reset()
+    check timer.getTime_ns() >= 0
+    expect AssertionDefect:
+      discard timer.ratio(0.0)
+
+  test "integer modulo and floor division handle signed boundaries":
+    check (int.high - 1) % int.high == int.high - 1
+    check int.low % 3 == 1
+    check 5 % -3 == -1
+    check -5 % -3 == -2
+    check int.low // 3 == int.low div 3 - 1
+    check 5 // -3 == -2
+    check -5 // 3 == -2
+    check -5 // -3 == 1
+    var x = -5
+    x %= 3
+    check x == 1
+    x //= -2
+    check x == -1
+    check 5'u % 3'u == 2'u
+    check 5'u // 3'u == 1'u
+
+  test "sequence pop uses the standard operation":
+    var values = @["a", "b"]
+    check values.pop() == "b"
+    check values == @["a"]
+    values.pop()
+    expect IndexDefect:
+      discard values.pop()
+
   test "memoized supports arguments and cache reset":
     var calls = 0
     proc twice(x: int): int {.memoized.} =
