@@ -2,6 +2,8 @@
 include ../header
 
 # √分割されたソート済みコンテナ。
+# 計算量（B = blockSize）: 検索は O(log(n / B) + log B)、追加・削除は O(log(n / B) + B)。
+# 順位アクセスは O(n / B)、全走査・clear は O(n)。SortedDict のキー検索は平均 O(1)。
 when not declared SortedContainersModule:
     const SortedContainersModule = true
 

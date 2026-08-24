@@ -2,6 +2,8 @@
 include ../header
 
 # 2 次元配列を 1 次元のシーケンスで内部的に保持
+# 計算量: 初期化・fill・全走査は O(row * col)、添字アクセスは O(1)。
+# 行走査は O(col)、列走査は O(row)。
 when not declared FlatSeq2DModule:  # 2次元配列を1次元で管理する
     const FlatSeq2DModule = true
     type FlatSeq2D[T] = object

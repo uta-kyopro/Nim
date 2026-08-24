@@ -3,6 +3,7 @@ include ../header
 
 # 配列上の位置をキーとして扱うImplicit Treap。
 # ノードを連続したseqに保持し、GC管理の参照ノードを使わない。
+# 計算量（期待値）: 挿入・削除・添字アクセス・区間反転は O(log n)、全走査・clear は O(n)。
 when not declared ImplicitTreapModule:
     const ImplicitTreapModule = true
 

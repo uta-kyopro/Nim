@@ -4,6 +4,7 @@ include ../header
 
 
 # 2次元累積和
+# 計算量: 累積和構築は O(HW)、長方形和の取得は O(1)。
 when not declared CumulativeSum2DModule:
     const CumulativeSum2DModule = true
     # 1-indexで構成された2次元配列を累積和へ変換

@@ -4,6 +4,7 @@ include ../header
 
 
 # 0..<maの範囲の重複あり組み合わせ
+# 計算量: 1個の生成は O(r)、全列挙は O(C(ma + r - 1, r) * r)、作業領域は O(r)。
 when not declared CombinationsWithReplacementModule:
     const CombinationsWithReplacementModule = true
     iterator combinations_with_replacement(ma, r: int): seq[int] =

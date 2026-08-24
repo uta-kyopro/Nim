@@ -1,5 +1,6 @@
 include ../header
 
+# 計算量: push・pop・top・空判定は O(1)、get(i) は O(i)、全取得は O(n)。
 when not declared PersistentStackModule:
     const PersistentStackModule = true
 

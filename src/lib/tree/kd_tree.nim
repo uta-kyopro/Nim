@@ -3,6 +3,8 @@ include ../header
 
 # 静的次元の点集合に対するKD-tree。
 # 点は構築後不変で、検索結果には入力時のindexを返す。
+# 計算量（平均）: 構築 O(n log n)、最近傍 O(log n)、k近傍 O(log n + k log k)。
+# 半径・直方体検索は O(log n + m)。各検索の最悪計算量は O(n)（k近傍は O(n log k)）。
 when not declared KdTreeModule:
     const KdTreeModule = true
 

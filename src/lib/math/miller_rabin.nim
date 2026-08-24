@@ -4,6 +4,7 @@ include ../header
 
 
 # Miller-Rabin法による素数判定
+# 計算量: isPrime は固定個の基数に対して O(log n)、追加領域は O(1)。
 when not declared MillerRabinTestModule:
     const MillerRabinTestModule = true
     # a * b % mod (128bit)

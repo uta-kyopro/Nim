@@ -1,6 +1,7 @@
 include ../header
 
 # seqと同等に扱える固定長stack
+# 計算量: push・pop・添字アクセス・clear は O(1)、全走査は O(n)。
 when not declared StackModule:
     const StackModule = true
 
