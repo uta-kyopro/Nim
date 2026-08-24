@@ -17,18 +17,53 @@ when not declared Importer:
 
 when not declared InputHelper:
     const InputHelper = true
-    let readNext = iterator(getsChar: bool = false): string {.closure.} =
+    var
+        inputLine = ""
+        inputPos = 0
+
+    proc skipSpaces() {.inline.} =
         while true:
-            for s in stdin.readLine.splitWhitespace:
-                if getsChar: 
-                    for c in s: 
-                        yield $c
-                else: 
-                    yield s
-    template input(t: typedesc[string]): string = readNext()
-    template input(t: typedesc[char]): char = readNext(true)[0]
-    template input(t: typedesc[SomeInteger]): SomeInteger = readNext().parseInt.t
-    template input(t: typedesc[SomeFloat]): SomeFloat = readNext().parseFloat.t
+            while inputPos < inputLine.len and inputLine[inputPos] <= ' ':
+                inputPos.inc
+            if inputPos < inputLine.len:
+                return
+            if not stdin.readLine(inputLine):
+                raise newException(EOFError, "unexpected end of input")
+            inputPos = 0
+
+    proc input(t: typedesc[string]): string =
+        skipSpaces()
+        let first = inputPos
+        while inputPos < inputLine.len and inputLine[inputPos] > ' ':
+            inputPos.inc
+        inputLine[first..<inputPos]
+
+    proc input(t: typedesc[char]): char {.inline.} =
+        skipSpaces()
+        result = inputLine[inputPos]
+        inputPos.inc
+
+    proc input[T: SomeInteger](t: typedesc[T]): T {.inline.} =
+        skipSpaces()
+        var negative = false
+        if inputLine[inputPos] == '-':
+            negative = true
+            inputPos.inc
+        elif inputLine[inputPos] == '+':
+            inputPos.inc
+        while inputPos < inputLine.len:
+            let digit = ord(inputLine[inputPos]) - ord('0')
+            if digit notin 0..9:
+                break
+            if negative:
+                result = result * 10 - T(digit)
+            else:
+                result = result * 10 + T(digit)
+            inputPos.inc
+
+    proc input[T: SomeFloat](t: typedesc[T]): T =
+        T(input(string).parseFloat)
+
     template input(t: typedesc, n: int): seq[t] =           # seq[type]
         newSeqWith(n, input(t))
     template input(t: typedesc, n1, n2: int): seq[seq[t]] = # seq[seq[type]]
