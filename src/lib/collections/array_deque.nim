@@ -2,6 +2,7 @@
 include ../header
 
 # 固定長両端キュー（格納可能な要素数は N - 1）
+# 計算量: 両端の追加・削除、添字アクセス、回転、長さ取得は O(1)、全走査は O(n)。
 when not declared ArrayDequeModule:
     const ArrayDequeModule = true
     # Nは2冪。通常ビルドでは空からの取得と容量超過は未定義動作。

@@ -1,5 +1,6 @@
 include ../header
 
+# 計算量: 初期化・reset・時刻取得・ratio・expired はすべて O(1)。
 when not declared TimeModule:
     const TimeModule = true
 

@@ -1,5 +1,7 @@
 include ../header
 
+# 計算量: IndexSet は追加・削除・検索・添字アクセスが O(1)。
+# IndexedSet はハッシュ表により平均 O(1)。全走査・clear は O(n)。
 when not declared IndexedSetModule:
     const IndexedSetModule = true
 

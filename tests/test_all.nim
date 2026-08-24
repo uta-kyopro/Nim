@@ -625,3 +625,29 @@ suite "header helpers":
     resetCacheTwice()
     check twice(7) == 14
     check calls == 2
+
+  test "memoized supports multiple and no arguments":
+    var addCalls = 0
+    proc addCached(a, b: int): int {.memoized.} =
+      addCalls.inc
+      a + b
+    check addCached(2, 3) == 5
+    check addCached(2, 3) == 5
+    check addCalls == 1
+
+    var niladicCalls = 0
+    proc answer(): int {.memoized.} =
+      niladicCalls.inc
+      42
+    check answer() == 42
+    check answer() == 42
+    check niladicCalls == 1
+
+  test "memoize caches proc results":
+    var calls = 0
+    let twice = memoize(proc(x: int): int =
+      calls.inc
+      x * 2)
+    check twice(7) == 14
+    check twice(7) == 14
+    check calls == 1

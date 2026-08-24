@@ -1,5 +1,7 @@
 include ../header
 
+# 計算量（L = 文字列長、A = 各ノードの最大分岐数）: 検索・prefix検索・挿入は平均 O(L)。
+# 最小・最大文字列取得は O(L * A)。
 when not declared TrieModule:
     const TrieModule = true
 

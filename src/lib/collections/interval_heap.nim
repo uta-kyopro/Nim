@@ -3,6 +3,7 @@ include ../header
 
 
 # 両端取り出しできるHeapQueue
+# 計算量: 構築 O(n)、最小・最大値取得 O(1)、追加・削除・置換 O(log n)。
 when not declared IntervalHeapModule:
     const IntervalHeapModule = true
     # 通常のHeapQueueと比べて2~3倍遅い

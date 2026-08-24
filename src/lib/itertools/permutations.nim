@@ -30,6 +30,7 @@ include ../header
 
 
 # 0..<ma から r 個取り出した「順列」（重複なし、長さ r）
+# 計算量: 1個の生成は O(r)、全列挙は O(P(ma, r) * r)、作業領域は O(r)。
 when not declared PermutationsModule:
     const PermutationsModule = true
     iterator permutations(ma, r: int): seq[int] =

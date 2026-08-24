@@ -3,6 +3,7 @@ include ../header
 
 # √分割された可変長列（Unrolled Linked List）。
 # ブロック間リンクには整数添字を使い、GC管理の参照ノードを使わない。
+# 計算量（B = blockSize）: 添字アクセス・挿入・削除は O(n / B + B)、区間反転・全走査は O(n)。
 when not declared UnrolledLinkedListModule:
     const UnrolledLinkedListModule = true
 

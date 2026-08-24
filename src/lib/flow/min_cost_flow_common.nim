@@ -6,6 +6,7 @@ include ../header
 #   1回の増加でボトルネック容量まで流すため、Iは要求流量以下になる。
 # 共通API:
 #   init: O(V), addEdge: amortized O(1), getEdge: O(1), edges: O(E)
+# 計算量: initialPotential は O(VE)、1回の augment は O(V)。
 when not declared MinCostFlowCommonModule:
     const MinCostFlowCommonModule = true
 

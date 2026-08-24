@@ -2,6 +2,7 @@
 include ../header
 
 
+# 計算量: 1 bit の取得・更新は O(1)、clear・popCount・集合演算は O(N / 64)。
 when not declared BitSetModule:
     const BitSetModule = true
     const BitWidth = 64

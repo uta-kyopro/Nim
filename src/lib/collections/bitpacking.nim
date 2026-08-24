@@ -3,6 +3,7 @@ include ../header
 # import std/bitops
 
 # bit区切りでuintに複数値を格納, 取り出し
+# 計算量: 固定幅フィールドの取得・更新はいずれも O(1)。
 when not declared BitPackingModule:
     const BitPackingModule = true
     const bitMask64: seq[uint64] = (0..32).toSeq().mapIt(toMask[uint64](0..<it))

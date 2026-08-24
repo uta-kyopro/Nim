@@ -3,6 +3,7 @@ include ../header
 
 # thunder_libraryのObjectPoolを参考にした、整数index型のオブジェクトプール。
 # 削除したindexをLIFOで再利用し、要素本体は連続したseqに保持する。
+# 計算量: 確保（償却）・解放・添字アクセスは O(1)、reserve・clear は O(n)。
 when not declared ObjectPoolModule:
     const ObjectPoolModule = true
 

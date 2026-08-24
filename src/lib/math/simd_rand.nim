@@ -3,6 +3,7 @@ include ../header
 
 
 # SIMDを使った8並列乱数生成(標準の約2倍程度の速度)
+# 計算量: 初期化は O(1)、rand・randrange は期待 O(1)（8個単位でSIMD生成）。
 when not declared SimdRandModule:       # 乱数生成高速化
     const SimdRandModule = true
     {.passC: "-mavx2".}
