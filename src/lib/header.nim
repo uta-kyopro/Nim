@@ -1,6 +1,4 @@
 
-# 計算量: 入出力は処理する文字数に比例、基本演算は O(1)。
-# memoized のキャッシュ参照・登録は平均 O(1)（初回は元の関数の計算量を加える）。
 {.hints:off checks:off warnings:off assertions:off optimization:speed.}
 when defined(debug): {.checks:on.}
 {.passC: "-O3 -march=native -mtune=native".}
@@ -126,4 +124,5 @@ when not declared UserOperator:
     proc initHashSet[T]():Hashset[T] = initHashSet[T](0)
     proc clear[T](self:var Hashset[T]) = self = initHashSet[T](0)
 
+const inf = int.high // 2
 
