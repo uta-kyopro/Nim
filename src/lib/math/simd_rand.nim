@@ -2,8 +2,11 @@
 include ../header
 
 
-# SIMDを使った8並列乱数生成(標準の約2倍程度の速度)
-# 計算量: 初期化は O(1)、rand・randrange は期待 O(1)（8個単位でSIMD生成）。
+# AVX2を使った8並列乱数生成（xoroshiro64**、AVX2対応CPUが必要）。
+# 計算量: 初期化・rand・randrange は O(1)（8個単位でSIMD生成）。
+# 範囲変換は速度優先の乗算上位32bit方式。幅が2冪以外では僅かな偏りがある。
+# 一様な32bit入力に対し各値の確率誤差は絶対値で 2^-32 未満。
+# 幅が大きいと相対的な偏りは無視できない。厳密な一様乱数には使わない。
 when not declared SimdRandModule:       # 乱数生成高速化
     const SimdRandModule = true
     {.passC: "-mavx2".}
@@ -29,16 +32,18 @@ when not declared SimdRandModule:       # 乱数生成高速化
     proc initSimdRng(seed: uint64 = 0x106689D45497FDB5'u64): SimdRng =
         proc splitmix64(x: var uint64): uint64 =
             x += 0x9E3779B97F4A7C15'u64
-            x = (x xor (x shr 30)) * 0xBF58476D1CE4E5B9'u64
-            x = (x xor (x shr 27)) * 0x94D049BB133111EB'u64
-            x xor (x shr 31)
+            var z = x
+            z = (z xor (z shr 30)) * 0xBF58476D1CE4E5B9'u64
+            z = (z xor (z shr 27)) * 0x94D049BB133111EB'u64
+            z xor (z shr 31)
 
         var x = seed
         var l, h {.align: 32.}: array[8, cuint]
         for i in 0..7:
             let b = splitmix64(x)
-            l[i] = cast[cuint](splitmix64(x) or 1'u64)
-            h[i] = cast[cuint]((splitmix64(x) shr 32) or 1'u64)
+            l[i] = cast[cuint](b)
+            h[i] = cast[cuint](b shr 32)
+            if b == 0: h[i] = 1  # 各レーンの全ゼロ状態だけを避ける
         result.a0 = mm256_load_si256(cast[ptr M256i](l[0].addr))
         result.a1 = mm256_load_si256(cast[ptr M256i](h[0].addr))
         result.c = mm256_set1_epi32(cast[cuint](0x9E3779BB))
@@ -58,24 +63,23 @@ when not declared SimdRandModule:       # 乱数生成高速化
                 mm256_xor_si256(a1, mm256_slli_epi32(a1, 9)))
         r.a1 = a1.rotl(13)
 
-    # 0..ma の範囲を返す
-    proc rand(r: var SimdRng, ma: int): int =
-        if ma<=0: return 0
-        if ((ma+1) and ma) == 0:  # 2冪はマスクで高速化
-            if r.i == 0: r.next()
-            result = cast[int](r.data[r.i]) and ma
-            r.i = (r.i+1) and 7
-        else:
-            let max32 = cast[uint32](ma+1)
-            let max64 = cast[uint64](max32)
-            let thresh = (0'u32 - max32) mod max32
-            while true:
-                if r.i == 0: r.next()
-                let x = cast[uint64](r.data[r.i]) * max64
-                r.i = (r.i+1) and 7
-                if cast[uint32](x) >= thresh:
-                    return cast[int](x shr 32)
+    # 0..ma。前提: 0 <= ma <= 2^32-1（かつintに収まること）。
+    # -d:debug のみ引数を検査する。通常ビルドで前提違反の結果は保証しない。
+    # ma == 0 は乱数を消費しない。同じseedでも旧実装とは生成列が変わる。
+    proc rand(r: var SimdRng, ma: int): int {.inline.} =
+        when defined(debug):
+            doAssert ma >= 0 and uint64(ma) <= 0xFFFFFFFF'u64,
+                "SimdRng.rand requires 0 <= ma <= 2^32-1"
+        if ma == 0: return 0
+        if r.i == 0: r.next()
+        let width = uint64(ma) + 1'u64
+        result = int((uint64(r.data[r.i]) * width) shr 32)
+        r.i = (r.i+1) and 7
 
-    # 0..<ma の範囲を返す
-    template randrange(r: var SimdRng, ma: int): int = r.rand(ma-1)
+    # 0..<ma。前提: 1 <= ma <= 2^32（かつintに収まること）。
+    proc randrange(r: var SimdRng, ma: int): int {.inline.} =
+        when defined(debug):
+            doAssert ma > 0 and uint64(ma) <= 0x100000000'u64,
+                "SimdRng.randrange requires 1 <= ma <= 2^32"
+        r.rand(ma-1)
 

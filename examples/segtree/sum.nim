@@ -39,3 +39,36 @@ var sgSumCount = initSegTree(base, sumOpCount, sumECount)
 let res = sgSumCount.prod(1..<4)
 echo res[0]   # sum
 echo res[1]   # count
+
+
+# ============================================================
+# 最大部分配列和
+# ============================================================
+
+type MaxSubarrayNode = tuple
+    sum: int
+    prefix: int
+    suffix: int
+    best: int
+
+proc maxSubarrayE(): MaxSubarrayNode =
+    (sum: 0, prefix: -inf, suffix: -inf, best: -inf)
+
+proc maxSubarrayOp(a, b: MaxSubarrayNode): MaxSubarrayNode =
+    (
+        sum: a.sum + b.sum,
+        prefix: max(a.prefix, a.sum + b.prefix),
+        suffix: max(b.suffix, b.sum + a.suffix),
+        best: max(max(a.best, b.best), a.suffix + b.prefix)
+    )
+
+proc makeMaxSubarrayNode(x: int): MaxSubarrayNode =
+    (sum: x, prefix: x, suffix: x, best: x)
+
+var baseSub = A.mapIt(makeMaxSubarrayNode(it))
+var sgSub =
+    initSegTree(baseSub, maxSubarrayOp, maxSubarrayE)
+
+echo sgSub.prod(0..<A.len).best
+
+
