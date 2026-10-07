@@ -2,30 +2,30 @@ include ../header
 
 # 計算量（L = 文字列長、A = 各ノードの最大分岐数）: 検索・prefix検索・挿入は平均 O(L)。
 # 最小・最大文字列取得は O(L * A)。
-when not declared TrieModule:
-    const TrieModule = true
+when not declared TableTrieModule:
+    const TableTrieModule = true
 
-    type TrieNode = ref object
-        children: Table[char, TrieNode]
+    type TableTrieNode = ref object
+        children: Table[char, TableTrieNode]
         isEndWord: bool
         value: int
         maxLength: int
         minLength: int
         count: int
 
-    type Trie = object
-        root: TrieNode
+    type TableTrie = object
+        root: TableTrieNode
         totalCount: int
         nodeCount: int
 
-    proc initTrieNode(): TrieNode =
-        result = new TrieNode
+    proc initTableTrieNode(): TableTrieNode =
+        result = new TableTrieNode
         result.minLength = int.high
 
-    proc initTrie(): Trie =
-        result.root = initTrieNode()
+    proc initTableTrie(): TableTrie =
+        result.root = initTableTrieNode()
 
-    proc search(self: Trie, word: string): bool =
+    proc search(self: TableTrie, word: string): bool =
         var node = self.root
         for ch in word:
             if ch notin node.children:
@@ -33,7 +33,7 @@ when not declared TrieModule:
             node = node.children[ch]
         node.isEndWord
 
-    proc startsWith(self: Trie, prefix: string): bool =
+    proc startsWith(self: TableTrie, prefix: string): bool =
         var node = self.root
         for ch in prefix:
             if ch notin node.children:
@@ -41,15 +41,15 @@ when not declared TrieModule:
             node = node.children[ch]
         true
 
-    proc insert(self: var Trie, word: string, duplicate: bool = true,
-            value: int = 0): bool {.discardable.} =
+    proc insert(self: var TableTrie, word: string, duplicate: bool = true,
+        value: int = 0): bool {.discardable.} =
         if not duplicate and self.search(word):
             return false
         var node = self.root
         self.totalCount.inc
         for ch in word:
             if ch notin node.children:
-                node.children[ch] = initTrieNode()
+                node.children[ch] = initTableTrieNode()
                 self.nodeCount.inc
             node = node.children[ch]
             node.count.inc
@@ -59,9 +59,9 @@ when not declared TrieModule:
         node.isEndWord = true
         true
 
-    proc getMinString(self: Trie): string =
+    proc getMinString(self: TableTrie): string =
         when defined(debug):
-            assert self.totalCount > 0, "cannot get a word from an empty Trie"
+            assert self.totalCount > 0, "cannot get a word from an empty TableTrie"
         var node = self.root
         while not node.isEndWord:
             var found = false
@@ -75,9 +75,9 @@ when not declared TrieModule:
             result.add(nextChar)
             node = node.children[nextChar]
 
-    proc getMaxString(self: Trie): string =
+    proc getMaxString(self: TableTrie): string =
         when defined(debug):
-            assert self.totalCount > 0, "cannot get a word from an empty Trie"
+            assert self.totalCount > 0, "cannot get a word from an empty TableTrie"
         var node = self.root
         while node.children.len > 0:
             var found = false

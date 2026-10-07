@@ -29,14 +29,14 @@ when not declared KdTreeModule:
             result += d * d
 
     proc pointLess[K, T](points: openArray[KdPoint[K, T]],
-            a, b, axis: int): bool {.inline.} =
+        a, b, axis: int): bool {.inline.} =
         if points[a][axis] != points[b][axis]:
             points[a][axis] < points[b][axis]
         else:
             a < b
 
     proc selectKth[K, T](points: openArray[KdPoint[K, T]],
-            indices: var seq[int], first, last, kth, axis: int) =
+        indices: var seq[int], first, last, kth, axis: int) =
         # [first,last)のkthへquickselect。median-of-threeでpivotを選ぶ。
         var left = first
         var right = last
@@ -61,7 +61,7 @@ when not declared KdTreeModule:
             else: left = store + 1
 
     proc initKdTree[K: static[int], T: SomeNumber](
-            points: openArray[KdPoint[K, T]]): KdTree[K, T] =
+        points: openArray[KdPoint[K, T]]): KdTree[K, T] =
         static: doAssert K > 0, "KD-tree dimension must be positive"
         result.root = -1
         if points.len == 0: return
@@ -90,7 +90,7 @@ when not declared KdTreeModule:
     proc len[K, T](self: KdTree[K, T]): int {.inline.} = self.nodes.len
 
     proc nearest[K, T](self: KdTree[K, T],
-            query: KdPoint[K, T]): KdNeighbor =
+        query: KdPoint[K, T]): KdNeighbor =
         if self.root < 0: return (-1, Inf)
         result = (-1, Inf)
         var stack = @[(self.root, 0.0)]
@@ -100,8 +100,8 @@ when not declared KdTreeModule:
             let current = self.nodes[node]
             let distance = squaredDistance(current.point, query)
             if distance < result.distanceSquared or
-                    (distance == result.distanceSquared and
-                    current.originalIndex < result.index):
+                (distance == result.distanceSquared and
+                current.originalIndex < result.index):
                 result = (current.originalIndex, distance)
             let delta = float64(query[current.axis]) -
                 float64(current.point[current.axis])
@@ -112,7 +112,7 @@ when not declared KdTreeModule:
             stack.add((near, 0.0))
 
     proc kNearest[K, T](self: KdTree[K, T], query: KdPoint[K, T],
-            count: Natural): seq[KdNeighbor] =
+        count: Natural): seq[KdNeighbor] =
         if count == 0 or self.root < 0: return
         let limit = min(count, self.nodes.len)
         # 負距離を使い、HeapQueueの先頭を現在の最悪候補にする。
@@ -147,7 +147,7 @@ when not declared KdTreeModule:
             if result == 0: result = cmp(a.index, b.index))
 
     proc radiusSearch[K, T](self: KdTree[K, T], query: KdPoint[K, T],
-            radius: SomeNumber): seq[KdNeighbor] =
+        radius: SomeNumber): seq[KdNeighbor] =
         let radiusSquared = float64(radius) * float64(radius)
         if radius >= 0:
             var stack = @[self.root]
@@ -173,7 +173,7 @@ when not declared KdTreeModule:
             if result == 0: result = cmp(a.index, b.index))
 
     proc rangeSearch[K, T](self: KdTree[K, T],
-            lower, upper: KdPoint[K, T]): seq[int] =
+        lower, upper: KdPoint[K, T]): seq[int] =
         # 各軸についてlower <= point <= upperの閉区間検索。
         var stack = @[self.root]
         while stack.len > 0:
@@ -183,7 +183,7 @@ when not declared KdTreeModule:
             var inside = true
             for axis in 0..<K:
                 if current.point[axis] < lower[axis] or
-                        current.point[axis] > upper[axis]:
+                    current.point[axis] > upper[axis]:
                     inside = false
                     break
             if inside: result.add(current.originalIndex)

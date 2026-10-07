@@ -60,15 +60,18 @@ sg.allProd()      # 全区間
 
 ## 実装例一覧
 
+加算・代入と和・最小値・最大値をまとめて使う場合は [統合版](../src/examples/lazysegtree/affine_sum_min_max.nim)。[AOJ DSL_2対応表](range_query.md)も参照。
+
 よく使う基本形から掲載。各ファイルに型定義・操作・使用例をまとめている。
 
 | ファイル | 区間更新 | 区間取得 | ノード `S` | 操作 `F` / 恒等操作 |
 | --- | --- | --- | --- | --- |
-| [add_sum.nim](../examples/lazysegtree/add_sum.nim) | 加算 | 和 | `(sum, len)` | 加算量 / `0` |
-| [assign_sum.nim](../examples/lazysegtree/assign_sum.nim) | 代入 | 和 | `(sum, len)` | `(active, value)` / `(false, 0)` |
-| [add_min_max.nim](../examples/lazysegtree/add_min_max.nim) | 加算 | 最小値・最大値 | `(mn, mx, len)` | 加算量 / `0` |
-| [assign_min_max.nim](../examples/lazysegtree/assign_min_max.nim) | 代入 | 最小値・最大値 | `(mn, mx, len)` | `(active, value)` / `(false, 0)` |
-| [affine_sum.nim](../examples/lazysegtree/affine_sum.nim) | `x ← a*x+b` | 和 | `(sum, len)` | `(a, b)` / `(1, 0)` |
+| [add_sum.nim](../src/examples/lazysegtree/add_sum.nim) | 加算 | 和 | `(sum, len)` | 加算量 / `0` |
+| [assign_sum.nim](../src/examples/lazysegtree/assign_sum.nim) | 代入 | 和 | `(sum, len)` | `(active, value)` / `(false, 0)` |
+| [add_min_max.nim](../src/examples/lazysegtree/add_min_max.nim) | 加算 | 最小値・最大値 | `(mn, mx, len)` | 加算量 / `0` |
+| [assign_min_max.nim](../src/examples/lazysegtree/assign_min_max.nim) | 代入 | 最小値・最大値 | `(mn, mx, len)` | `(active, value)` / `(false, 0)` |
+| [affine_sum.nim](../src/examples/lazysegtree/affine_sum.nim) | `x ← a*x+b` | 和 | `(sum, len)` | `(a, b)` / `(1, 0)` |
+| [affine_min_max.nim](../src/examples/lazysegtree/affine_min_max.nim) | `x ← a*x+b` | 最小値・最大値 | `(mn, mx, len)` | `(a, b)` / `(1, 0)` |
 
 ### 注意点
 

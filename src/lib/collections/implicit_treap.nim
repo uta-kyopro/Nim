@@ -4,6 +4,7 @@ include ../header
 # 配列上の位置をキーとして扱うImplicit Treap。
 # ノードを連続したseqに保持し、GC管理の参照ノードを使わない。
 # 計算量（期待値）: 挿入・削除・添字アクセス・区間反転は O(log n)、全走査・clear は O(n)。
+# 両端取得・削除・shiftForwardも期待 O(log n)。
 when not declared ImplicitTreapModule:
     const ImplicitTreapModule = true
 
@@ -22,7 +23,7 @@ when not declared ImplicitTreapModule:
             rngState: uint64
 
     proc initImplicitTreap[T](capacity: Natural = 0,
-            seed: uint64 = 0x9E3779B97F4A7C15'u64): ImplicitTreap[T] =
+        seed: uint64 = 0x9E3779B97F4A7C15'u64): ImplicitTreap[T] =
         result.root = -1
         result.rngState = if seed == 0: 0x9E3779B97F4A7C15'u64 else: seed
         result.nodes = newSeqOfCap[ImplicitTreapNode[T]](capacity)
@@ -114,6 +115,10 @@ when not declared ImplicitTreapModule:
     proc addLast[T](self: var ImplicitTreap[T], value: sink T) {.inline.} =
         self.insert(self.len, value)
 
+    # seq互換の末尾追加。期待 O(log n)。
+    proc add[T](self: var ImplicitTreap[T], value: sink T) {.inline.} =
+        self.addLast(value)
+
     proc delete[T](self: var ImplicitTreap[T], pos: Natural): T {.discardable.} =
         when defined(debug):
             assert pos < self.len, "ImplicitTreap deletion position is out of range"
@@ -170,6 +175,48 @@ when not declared ImplicitTreapModule:
         let (middle, right) = self.split(rest, last - first)
         self.toggleReverse(middle)
         self.root = self.merge(self.merge(left, middle), right)
+
+    # ArrayDeque互換。空でないことが前提。参照取得後の構造変更は避ける。
+    proc popFirst[T](self: var ImplicitTreap[T]): T {.discardable.} =
+        when defined(debug):
+            doAssert self.len > 0, "cannot pop from an empty ImplicitTreap"
+        self.delete(0)
+
+    proc popLast[T](self: var ImplicitTreap[T]): T {.discardable.} =
+        when defined(debug):
+            doAssert self.len > 0, "cannot pop from an empty ImplicitTreap"
+        self.delete(self.len - 1)
+
+    # seq互換の末尾削除。期待 O(log n)、空でないことが前提。
+    proc pop[T](self: var ImplicitTreap[T]): T {.inline, discardable.} =
+        self.popLast()
+
+    proc peakFirst[T](self: var ImplicitTreap[T]): var T =
+        when defined(debug):
+            doAssert self.len > 0, "cannot peek into an empty ImplicitTreap"
+        var node = self.root
+        self.push(node)
+        while self.nodes[node].left >= 0:
+            node = self.nodes[node].left
+            self.push(node)
+        result = self.nodes[node].value
+
+    proc peakLast[T](self: var ImplicitTreap[T]): var T =
+        when defined(debug):
+            doAssert self.len > 0, "cannot peek into an empty ImplicitTreap"
+        var node = self.root
+        self.push(node)
+        while self.nodes[node].right >= 0:
+            node = self.nodes[node].right
+            self.push(node)
+        result = self.nodes[node].value
+
+    # 先頭を末尾へ移す。[a, b, c] -> [b, c, a]
+    proc shiftForward[T](self: var ImplicitTreap[T]) =
+        when defined(debug):
+            doAssert self.len > 0, "cannot shift an empty ImplicitTreap"
+        let (first, rest) = self.split(self.root, 1)
+        self.root = self.merge(rest, first)
 
     proc clear[T](self: var ImplicitTreap[T]) =
         self.nodes.setLen(0)

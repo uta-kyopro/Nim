@@ -17,13 +17,13 @@ when not declared MinCostFlowDenseModule:
         result.data = initMinCostFlowData(nodeCount)
     proc len(self: MinCostFlowDense): int = self.data.len
     proc addEdge(self: var MinCostFlowDense, src, dst: int,
-            capacity: FlowCap, cost: FlowCost): int {.discardable.} =
+        capacity: FlowCap, cost: FlowCost): int {.discardable.} =
         self.data.addEdge(src, dst, capacity, cost)
     proc getEdge(self: MinCostFlowDense, index: int): MinCostFlowEdge = self.data.getEdge(index)
     proc edges(self: MinCostFlowDense): seq[MinCostFlowEdge] = self.data.edges()
 
     proc slope(self: var MinCostFlowDense, src, dst: int,
-            flowLimit: FlowCap = high(FlowCap)): seq[FlowResult] =
+        flowLimit: FlowCap = high(FlowCap)): seq[FlowResult] =
         when defined(debug):
             assert src in 0..<self.len and dst in 0..<self.len and src != dst
             assert flowLimit >= 0
@@ -39,7 +39,7 @@ when not declared MinCostFlowDenseModule:
                 var node = -1
                 for candidate in 0..<self.len:
                     if not used[candidate] and distance[candidate] != FlowCostInf and
-                            (node < 0 or distance[candidate] < distance[node]):
+                        (node < 0 or distance[candidate] < distance[node]):
                         node = candidate
                 if node < 0: break
                 used[node] = true
@@ -59,5 +59,5 @@ when not declared MinCostFlowDenseModule:
             result.appendSlopePoint(amount)
 
     proc flow(self: var MinCostFlowDense, src, dst: int,
-            flowLimit: FlowCap = high(FlowCap)): FlowResult =
+        flowLimit: FlowCap = high(FlowCap)): FlowResult =
         self.slope(src, dst, flowLimit)[^1]
