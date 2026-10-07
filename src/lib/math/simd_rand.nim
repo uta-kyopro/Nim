@@ -59,8 +59,8 @@ when not declared SimdRandModule:       # 乱数生成高速化
 
         let a1 = mm256_xor_si256(r.a0, r.a1)
         r.a0 = mm256_xor_si256(
-                r.a0.rotl(26),
-                mm256_xor_si256(a1, mm256_slli_epi32(a1, 9)))
+            r.a0.rotl(26),
+            mm256_xor_si256(a1, mm256_slli_epi32(a1, 9)))
         r.a1 = a1.rotl(13)
 
     # 0..ma。前提: 0 <= ma <= 2^32-1（かつintに収まること）。

@@ -1,5 +1,5 @@
 
-include ../../src/lib/header
+include ../../lib/header
 import atcoder/segtree
 
 

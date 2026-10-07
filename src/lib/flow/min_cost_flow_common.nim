@@ -37,7 +37,7 @@ when not declared MinCostFlowCommonModule:
     proc len(self: MinCostFlowData): int {.inline.} = self.graph.len
 
     proc addEdge(self: var MinCostFlowData, src, dst: int,
-            capacity: FlowCap, cost: FlowCost): int =
+        capacity: FlowCap, cost: FlowCost): int =
         when defined(debug):
             assert src in 0..<self.len and dst in 0..<self.len
             assert capacity >= 0, "min-cost-flow capacity must be nonnegative"
@@ -65,7 +65,7 @@ when not declared MinCostFlowCommonModule:
         for i in 0..<self.positions.len: result.add(self.getEdge(i))
 
     proc augment(self: var MinCostFlowData, parentNode, parentEdge: seq[int],
-            src, dst: int, limit: FlowCap): FlowResult =
+        src, dst: int, limit: FlowCap): FlowResult =
         var amount = limit
         var node = dst
         var unitCost: FlowCost = 0
@@ -117,7 +117,7 @@ when not declared MinCostFlowCommonModule:
 
     proc appendSlopePoint(result: var seq[FlowResult], amount: FlowResult) =
         let next = (flow: result[^1].flow + amount.flow,
-                    cost: result[^1].cost + amount.cost)
+            cost: result[^1].cost + amount.cost)
         if result.len >= 2:
             let previousFlow = result[^1].flow - result[^2].flow
             let previousCost = result[^1].cost - result[^2].cost

@@ -4,7 +4,7 @@ include ../header
 
 
 # Miller-Rabin法による素数判定
-# 計算量: isPrime は固定個の基数に対して O(log n)、追加領域は O(1)。
+# 計算量: isPrimeMillerRabin は固定個の基数に対して O(log n)、追加領域は O(1)。
 when not declared MillerRabinTestModule:
     const MillerRabinTestModule = true
     # a * b % mod (128bit)
@@ -20,7 +20,7 @@ when not declared MillerRabinTestModule:
 
     const WitnessNumbers = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
 
-    proc isPrime(n: int): bool =
+    proc isPrimeMillerRabin(n: int): bool =
         if n < 2: return false      # 0,1,負数は素数でない
         for p in WitnessNumbers:    # 小さい素数での試し割り
             if n == p: return true

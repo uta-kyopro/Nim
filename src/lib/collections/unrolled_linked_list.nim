@@ -4,6 +4,7 @@ include ../header
 # √分割された可変長列（Unrolled Linked List）。
 # ブロック間リンクには整数添字を使い、GC管理の参照ノードを使わない。
 # 計算量（B = blockSize）: 添字アクセス・挿入・削除は O(n / B + B)、区間反転・全走査は O(n)。
+# 両端取得は O(1)、両端削除・shiftForwardは O(B)。
 when not declared UnrolledLinkedListModule:
     const UnrolledLinkedListModule = true
 
@@ -20,7 +21,7 @@ when not declared UnrolledLinkedListModule:
             blockSize: int
 
     proc initUnrolledLinkedList[T](blockSize: Positive = 256,
-            capacity: Natural = 0): UnrolledLinkedList[T] =
+        capacity: Natural = 0): UnrolledLinkedList[T] =
         result.head = -1
         result.tail = -1
         result.blockSize = blockSize
@@ -113,13 +114,13 @@ when not declared UnrolledLinkedListModule:
             return
         let next = self.blocks[node].next
         if next >= 0 and self.blocks[node].data.len +
-                self.blocks[next].data.len <= self.blockSize * 2:
+            self.blocks[next].data.len <= self.blockSize * 2:
             self.blocks[node].data.add(self.blocks[next].data)
             self.unlink(next)
             return
         let prev = self.blocks[node].prev
         if prev >= 0 and self.blocks[prev].data.len +
-                self.blocks[node].data.len <= self.blockSize * 2:
+            self.blocks[node].data.len <= self.blockSize * 2:
             self.blocks[prev].data.add(self.blocks[node].data)
             self.unlink(node)
 
@@ -188,7 +189,7 @@ when not declared UnrolledLinkedListModule:
         while node >= 0:
             let next = self.blocks[node].next
             if next >= 0 and self.blocks[node].data.len +
-                    self.blocks[next].data.len <= self.blockSize:
+                self.blocks[next].data.len <= self.blockSize:
                 self.blocks[node].data.add(self.blocks[next].data)
                 self.unlink(next)
             else:
@@ -219,6 +220,35 @@ when not declared UnrolledLinkedListModule:
         if after >= 0: self.blocks[after].prev = firstBlock
         else: self.tail = firstBlock
         self.normalizeBlocks()
+
+    # ArrayDeque互換。空でないことが前提。参照取得後の構造変更は避ける。
+    proc popFirst[T](self: var UnrolledLinkedList[T]): T {.discardable.} =
+        when defined(debug):
+            doAssert self.len > 0, "cannot pop from an empty UnrolledLinkedList"
+        self.delete(0)
+
+    proc popLast[T](self: var UnrolledLinkedList[T]): T {.discardable.} =
+        when defined(debug):
+            doAssert self.len > 0, "cannot pop from an empty UnrolledLinkedList"
+        self.delete(self.len - 1)
+
+    proc peakFirst[T](self: var UnrolledLinkedList[T]): var T =
+        when defined(debug):
+            doAssert self.len > 0, "cannot peek into an empty UnrolledLinkedList"
+        result = self.blocks[self.head].data[0]
+
+    proc peakLast[T](self: var UnrolledLinkedList[T]): var T =
+        when defined(debug):
+            doAssert self.len > 0, "cannot peek into an empty UnrolledLinkedList"
+        result = self.blocks[self.tail].data[^1]
+
+    # 先頭を末尾へ移す。[a, b, c] -> [b, c, a]
+    proc shiftForward[T](self: var UnrolledLinkedList[T]) =
+        when defined(debug):
+            doAssert self.len > 0, "cannot shift an empty UnrolledLinkedList"
+        if self.len <= 1: return
+        let value = self.popFirst()
+        self.addLast(value)
 
     proc clear[T](self: var UnrolledLinkedList[T]) =
         self.blocks.setLen(0)

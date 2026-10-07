@@ -60,17 +60,17 @@ GCD の結合には整数の大きさに応じた計算コストが加わる。
 
 | ファイル | 用途 | 保持する値 | 単位元 |
 | --- | --- | --- | --- |
-| [max.nim](../examples/segtree/max.nim) | 区間最大値 | 最大値 | `-inf` |
+| [max.nim](../src/examples/segtree/max.nim) | 区間最大値 | 最大値 | `-inf` |
 | 同上 | 最大値と位置 | `(値, index)` | `(-inf, -1)` |
 | 同上 | 最大値とその個数 | `(値, 個数)` | `(-inf, 0)` |
 | 同上 | 最大値・第2最大値と各個数 | `(max1, count1, max2, count2)` | `(-inf, 0, -inf, 0)` |
-| [min.nim](../examples/segtree/min.nim) | 区間最小値 | 最小値 | `inf` |
+| [min.nim](../src/examples/segtree/min.nim) | 区間最小値 | 最小値 | `inf` |
 | 同上 | 最小値と位置 | `(値, index)` | `(inf, -1)` |
 | 同上 | 最小値とその個数 | `(値, 個数)` | `(inf, 0)` |
 | 同上 | 最小値・第2最小値と各個数 | `(min1, count1, min2, count2)` | `(inf, 0, inf, 0)` |
-| [sum.nim](../examples/segtree/sum.nim) | 区間和 | 合計 | `0` |
+| [sum.nim](../src/examples/segtree/sum.nim) | 区間和 | 合計 | `0` |
 | 同上 | 区間和と要素数（平均用） | `(合計, 個数)` | `(0, 0)` |
-| [gcd.nim](../examples/segtree/gcd.nim) | 区間GCD | GCD | `0` |
+| [gcd.nim](../src/examples/segtree/gcd.nim) | 区間GCD | GCD | `0` |
 | 同上 | 区間GCDと、それに等しい要素の個数 | `(g, count)` | `(0, 0)` |
-| [xor.nim](../examples/segtree/xor.nim) | 区間XOR | XOR | `0` |
-| [longest_run.nim](../examples/segtree/longest_run.nim) | 同じ文字が連続する最長区間 | 区間長・両端文字・接頭/接尾連続長・最長連続長 | 長さ0のノード |
+| [xor.nim](../src/examples/segtree/xor.nim) | 区間XOR | XOR | `0` |
+| [longest_run.nim](../src/examples/segtree/longest_run.nim) | 同じ文字が連続する最長区間 | 区間長・両端文字・接頭/接尾連続長・最長連続長 | 長さ0のノード |

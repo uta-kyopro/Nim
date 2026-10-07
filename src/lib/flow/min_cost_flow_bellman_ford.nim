@@ -17,13 +17,13 @@ when not declared MinCostFlowBellmanFordModule:
         result.data = initMinCostFlowData(nodeCount)
     proc len(self: MinCostFlowBellmanFord): int = self.data.len
     proc addEdge(self: var MinCostFlowBellmanFord, src, dst: int,
-            capacity: FlowCap, cost: FlowCost): int {.discardable.} =
+        capacity: FlowCap, cost: FlowCost): int {.discardable.} =
         self.data.addEdge(src, dst, capacity, cost)
     proc getEdge(self: MinCostFlowBellmanFord, index: int): MinCostFlowEdge = self.data.getEdge(index)
     proc edges(self: MinCostFlowBellmanFord): seq[MinCostFlowEdge] = self.data.edges()
 
     proc slope(self: var MinCostFlowBellmanFord, src, dst: int,
-            flowLimit: FlowCap = high(FlowCap)): seq[FlowResult] =
+        flowLimit: FlowCap = high(FlowCap)): seq[FlowResult] =
         when defined(debug):
             assert src in 0..<self.len and dst in 0..<self.len and src != dst
             assert flowLimit >= 0
@@ -55,5 +55,5 @@ when not declared MinCostFlowBellmanFordModule:
             result.appendSlopePoint(amount)
 
     proc flow(self: var MinCostFlowBellmanFord, src, dst: int,
-            flowLimit: FlowCap = high(FlowCap)): FlowResult =
+        flowLimit: FlowCap = high(FlowCap)): FlowResult =
         self.slope(src, dst, flowLimit)[^1]
