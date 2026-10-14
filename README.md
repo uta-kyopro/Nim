@@ -17,6 +17,8 @@
 ## フォルダ構成
 
 二次元配列の初期化・直接更新・変換については [FlatSeq2D](docs/flat_seq_2d.md) を参照してください。
+外部パッケージの使用例と不具合の検証記録は [外部ライブラリ](docs/external_libraries.md) を参照してください。
+C++バックエンドの符号付き・符号なし128bit整数は [Int128 / UInt128](docs/int128.md) を参照してください。
 
 ```text
 .
@@ -51,6 +53,7 @@
 │       │   ├── permutations.nim                   # 順列・部分順列の列挙
 │       │   └── product.nim                        # 直積の列挙
 │       ├── math/
+│       │   ├── int128.nim                         # C++の符号付き・符号なし128bit整数、入出力・型変換
 │       │   ├── miller_rabin.nim                   # 64-bit整数向けMiller–Rabin素数判定
 │       │   └── simd_rand.nim                      # AVX2で8個ずつ生成するSIMD乱数生成器
 │       ├── range_query/
