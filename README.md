@@ -2,6 +2,16 @@
 
 競技プログラミング向けの個人用Nimライブラリです。生成物の `build/` と管理用ディレクトリは省略しています。
 
+## 共通headerの利用
+
+`src/lib/header.nim` を `include` して使います。標準ライブラリに加えて、ACLのNim実装の `atcoder/`（`extra/` を含む）がimportできる環境が必要です。共通headerには入出力・演算子・メモ化のほか、ACLのデータ構造、`mint`（mod 998244353）、ソート済み集合の補助操作、時間計測が含まれます。
+
+通常の入力は、起動時に標準入力を固定バッファへ読み込みます。バッファ容量は64 MiBです。対話問題ではコンパイル時に `-d:interactive` を指定し、出力後に `flush()` を呼んでください。
+
+## ビームサーチ
+
+編集用テンプレートは `src/lib/search/thunder_beam.nim`、探索エンジンは `src/lib/search/thunder_beam_core.nim` です。使い方と実問題の例は [Thunder Beam Search](docs/thunder_beam.md) を参照してください。
+
 ## フォルダ構成
 
 ```text

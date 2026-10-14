@@ -21,7 +21,7 @@ nim cpp -d:release --mm:arc -o:build/ahc026 src/examples/thunder_beam/ahc026.nim
 
 内部は事前確保付きObjectPool、ビット集合付き線形探索HashMap（整数キーは再ハッシュなし）、再利用する候補配列・セグ木。経路復元は終了時のみ。汎用化に必要な初期完了・探索枯渇・未来の親ノード保護は残している。
 
-状態を適用・巻き戻しして巡回する差分更新ビームサーチ。ルートの `thunder_beam.nim` は元コードとして残している。
+状態を適用・巻き戻しして巡回する差分更新ビームサーチ。編集用テンプレートと探索エンジンは `src/lib/search/` に配置している。
 
 `src/lib/search/thunder_beam.nim` の「問題ごとに編集」だけを書き換える。未実装の関数は例外を出す。
 問題ごとにコピーして使う場合は、先頭の `thunder_beam_core` のimport先を配置に合わせる。
