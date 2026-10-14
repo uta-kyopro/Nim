@@ -2,6 +2,12 @@
 
 競技プログラミング向けの個人用Nimライブラリです。生成物の `build/` と管理用ディレクトリは省略しています。
 
+## ライセンス
+
+作者が権利を持つコード・ドキュメントには **CC0 1.0 Universal** を適用します。商用・非商用を問わず、利用・改変・再配布できます。ライセンス本文は [LICENSE](LICENSE)、公式説明は [Creative Commons CC0](https://creativecommons.org/publicdomain/zero/1.0/) を参照してください。
+
+依存する外部ライブラリや第三者が権利を持つ部分には、このCC0は適用されません。それぞれのライセンス・利用条件に従ってください。
+
 ## 共通headerの利用
 
 `src/lib/header.nim` を `include` して使います。標準ライブラリに加えて、ACLのNim実装の `atcoder/`（`extra/` を含む）がimportできる環境が必要です。共通headerには入出力・演算子・メモ化のほか、ACLのデータ構造、`mint`（mod 998244353）、ソート済み集合の補助操作、時間計測が含まれます。
