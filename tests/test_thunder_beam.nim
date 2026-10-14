@@ -76,14 +76,18 @@ suite "thunder beam":
         check dead.status == beamExhausted
         check dead.score == 7 and dead.actions.len == 0
 
-    test "validation":
-        expect ValueError: discard search(State(), 0)
-        expect ValueError: discard search(State(), 1, maxTurns = -1)
-        expect ValueError: discard search(State(), 1, timeLimitSec = -1)
-        expect ValueError: discard search(State(), 2, minBeamWidth = -1)
-        expect ValueError: discard search(State(), 2, minBeamWidth = 3, timeLimitSec = 1)
-        expect ValueError: discard search(State(), 2, minBeamWidth = 1)
-        expect ValueError: discard search(State(), 2, widthUpdateInterval = 0)
+    when defined(debug):
+        test "validation in debug builds":
+            expect ValueError: discard search(State(), 0)
+            expect ValueError: discard search(State(), 1, maxTurns = -1)
+            expect ValueError: discard search(State(), 1, timeLimitSec = -1)
+            expect ValueError: discard search(State(), 2, minBeamWidth = -1)
+            expect ValueError: discard search(State(), 2, minBeamWidth = 3, timeLimitSec = 1)
+            expect ValueError: discard search(State(), 2, minBeamWidth = 1)
+            expect ValueError: discard search(State(), 2, widthUpdateInterval = 0)
+            var frontier = BeamFrontier[int, int, int](width: 1, remaining: 1)
+            expect ValueError: discard frontier.push(0, 0, 0, 0, step = 0)
+            expect ValueError: discard frontier.push(0, 0, 0, 0, step = -1)
 
     test "adaptive width formula, bounds and last turn":
         check beamAdjustedWidth(3000, 1000, 600000, 1.0, 2.0, 500) == 1200

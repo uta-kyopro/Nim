@@ -143,7 +143,8 @@ when not declared SortedContainersModule:
         for values in self.blocks:
             if offset < values.len: return values[offset]
             offset -= values.len
-        raiseAssert "unreachable sorted container index"
+        when defined(debug):
+            raiseAssert "unreachable sorted container index"
 
     iterator blockItems[T](self: SqrtSortedBlocks[T]): lent T =
         for values in self.blocks:

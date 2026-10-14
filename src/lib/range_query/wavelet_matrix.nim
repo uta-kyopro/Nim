@@ -25,8 +25,9 @@ proc len*[T](wm: StaticWaveletMatrix[T]): int {.inline.} = wm.length
 proc len*[T](wm: CompressedStaticWaveletMatrix[T]): int {.inline.} = wm.matrix.len
 
 proc endpoints(length: int, p: Slice[int]): (int, int) =
-    if p.a < 0 or p.a > length or p.b < -1 or p.b >= length or p.b < p.a - 1:
-        raise newException(IndexDefect, "invalid wavelet matrix range")
+    when defined(debug):
+        if p.a < 0 or p.a > length or p.b < -1 or p.b >= length or p.b < p.a - 1:
+            raise newException(IndexDefect, "invalid wavelet matrix range")
     (p.a, p.b + 1)
 
 proc fits[T: SomeInteger](x: T, levels: int): bool {.inline.} =
@@ -36,11 +37,12 @@ proc fits[T: SomeInteger](x: T, levels: int): bool {.inline.} =
 
 proc initStaticWaveletMatrix*[T: SomeInteger](a: openArray[T],
     bitWidth = 0): StaticWaveletMatrix[T] =
-    if bitWidth < 0 or bitWidth > sizeof(T) * 8:
-        raise newException(ValueError, "invalid bit width")
+    when defined(debug):
+        if bitWidth < 0 or bitWidth > sizeof(T) * 8:
+            raise newException(ValueError, "invalid bit width")
     var maximum = 0'u64
     for x in a:
-        when T is SomeSignedInt:
+        when defined(debug) and T is SomeSignedInt:
             if x < 0: raise newException(ValueError, "use compressed matrix for negative values")
         maximum = max(maximum, uint64(x))
     var required = 0
@@ -48,8 +50,9 @@ proc initStaticWaveletMatrix*[T: SomeInteger](a: openArray[T],
         inc required
         maximum = maximum shr 1
     result.levels = if bitWidth == 0: max(1, required) else: bitWidth
-    if result.levels < required:
-        raise newException(ValueError, "bit width cannot represent all values")
+    when defined(debug):
+        if result.levels < required:
+            raise newException(ValueError, "bit width cannot represent all values")
     result.length = a.len
     result.bits.setLen(result.levels)
     result.middle.setLen(result.levels)
@@ -81,8 +84,9 @@ proc initStaticWaveletMatrix*[T: SomeInteger](a: openArray[T],
         swap(current, buffer)
 
 proc access*[T](wm: StaticWaveletMatrix[T], index: int): T =
-    if index < 0 or index >= wm.len:
-        raise newException(IndexDefect, "invalid wavelet matrix index")
+    when defined(debug):
+        if index < 0 or index >= wm.len:
+            raise newException(IndexDefect, "invalid wavelet matrix index")
     var position = index
     var value = 0'u64
     for level in countdown(wm.levels - 1, 0):
@@ -97,8 +101,9 @@ proc access*[T](wm: StaticWaveletMatrix[T], index: int): T =
 proc `[]`*[T](wm: StaticWaveletMatrix[T], index: int): T = wm.access(index)
 
 proc rank*[T](wm: StaticWaveletMatrix[T], x: T, stop: int): int =
-    if stop < 0 or stop > wm.len:
-        raise newException(IndexDefect, "invalid wavelet matrix prefix")
+    when defined(debug):
+        if stop < 0 or stop > wm.len:
+            raise newException(IndexDefect, "invalid wavelet matrix prefix")
     if not fits(x, wm.levels): return 0
     var left = 0
     var right = stop
@@ -115,8 +120,9 @@ proc rank*[T](wm: StaticWaveletMatrix[T], x: T, stop: int): int =
 
 proc kthSmallest*[T](wm: StaticWaveletMatrix[T], p: Slice[int], k: int): T =
     var (left, right) = endpoints(wm.len, p)
-    if k < 0 or k >= right - left:
-        raise newException(IndexDefect, "invalid wavelet matrix rank")
+    when defined(debug):
+        if k < 0 or k >= right - left:
+            raise newException(IndexDefect, "invalid wavelet matrix rank")
     var remaining = k
     var value = 0'u64
     for level in countdown(wm.levels - 1, 0):
@@ -135,8 +141,9 @@ proc kthSmallest*[T](wm: StaticWaveletMatrix[T], p: Slice[int], k: int): T =
 
 proc kthLargest*[T](wm: StaticWaveletMatrix[T], p: Slice[int], k: int): T =
     let (left, right) = endpoints(wm.len, p)
-    if k < 0 or k >= right - left:
-        raise newException(IndexDefect, "invalid wavelet matrix rank")
+    when defined(debug):
+        if k < 0 or k >= right - left:
+            raise newException(IndexDefect, "invalid wavelet matrix rank")
     wm.kthSmallest(p, right - left - 1 - k)
 
 proc rangeFreq*[T](wm: StaticWaveletMatrix[T], p: Slice[int], upper: T): int =
@@ -156,7 +163,8 @@ proc rangeFreq*[T](wm: StaticWaveletMatrix[T], p: Slice[int], upper: T): int =
             right -= r
 
 proc rangeFreq*[T](wm: StaticWaveletMatrix[T], p: Slice[int], lower, upper: T): int =
-    if upper < lower: raise newException(ValueError, "reversed value range")
+    when defined(debug):
+        if upper < lower: raise newException(ValueError, "reversed value range")
     wm.rangeFreq(p, upper) - wm.rangeFreq(p, lower)
 
 proc prevValue*[T](wm: StaticWaveletMatrix[T], p: Slice[int], upper: T): Option[T] =
@@ -182,8 +190,9 @@ proc access*[T](wm: CompressedStaticWaveletMatrix[T], index: int): T =
     wm.values[wm.matrix.access(index)]
 proc `[]`*[T](wm: CompressedStaticWaveletMatrix[T], index: int): T = wm.access(index)
 proc rank*[T](wm: CompressedStaticWaveletMatrix[T], x: T, stop: int): int =
-    if stop < 0 or stop > wm.len:
-        raise newException(IndexDefect, "invalid wavelet matrix prefix")
+    when defined(debug):
+        if stop < 0 or stop > wm.len:
+            raise newException(IndexDefect, "invalid wavelet matrix prefix")
     let index = wm.values.lowerBound(x)
     if index == wm.values.len or wm.values[index] != x: return 0
     wm.matrix.rank(index, stop)
@@ -194,7 +203,8 @@ proc kthLargest*[T](wm: CompressedStaticWaveletMatrix[T], p: Slice[int], k: int)
 proc rangeFreq*[T](wm: CompressedStaticWaveletMatrix[T], p: Slice[int], upper: T): int =
     wm.matrix.rangeFreq(p, wm.values.lowerBound(upper))
 proc rangeFreq*[T](wm: CompressedStaticWaveletMatrix[T], p: Slice[int], lower, upper: T): int =
-    if upper < lower: raise newException(ValueError, "reversed value range")
+    when defined(debug):
+        if upper < lower: raise newException(ValueError, "reversed value range")
     wm.rangeFreq(p, upper) - wm.rangeFreq(p, lower)
 proc prevValue*[T](wm: CompressedStaticWaveletMatrix[T], p: Slice[int], upper: T): Option[T] =
     let index = wm.matrix.prevValue(p, wm.values.lowerBound(upper))

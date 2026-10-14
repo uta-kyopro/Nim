@@ -162,7 +162,8 @@ when not declared ThunderBeamCoreModule:
     proc push*[A, S, K](frontier: var BeamFrontier[A, S, K], action: A,
         score: S, key: K, parent: int, finished = false, step = 1): bool {.discardable.} =
         ## score/key/finishedは遷移後の値。stepは正のターン消費量。
-        if step <= 0: raise newException(ValueError, "beam step must be positive")
+        when defined(debug):
+            if step <= 0: raise newException(ValueError, "beam step must be positive")
         if step > frontier.remaining: return false
         while frontier.selectors.len < step:
             frontier.selectors.addLast(BeamSelector[A, S, K](
@@ -218,7 +219,8 @@ when not declared ThunderBeamCoreModule:
         while child >= 0:
             while child >= 0 and not tree.nodes[child].active:
                 child = tree.nodes[child].right
-            doAssert child >= 0, "beam active subtree has no active child"
+            when defined(debug):
+                doAssert child >= 0, "beam active subtree has no active child"
             tree.nodes[v].active = false
             v = child
             tree.state.moveForward(tree.nodes[v].action)
@@ -285,15 +287,16 @@ when not declared ThunderBeamCoreModule:
         minBeamWidth = 0, widthUpdateInterval = 256,
         stopOnTimeLimit = true): BeamResult[Action, Score] =
         mixin evaluate, isFinished
-        if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
-        if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
-        if timeLimitSec < 0: raise newException(ValueError, "timeLimitSec must be nonnegative")
-        if minBeamWidth < 0 or minBeamWidth > beamWidth:
-            raise newException(ValueError, "minBeamWidth must be in 0..beamWidth")
-        if widthUpdateInterval <= 0:
-            raise newException(ValueError, "widthUpdateInterval must be positive")
-        if minBeamWidth > 0 and timeLimitSec <= 0:
-            raise newException(ValueError, "adaptive width requires timeLimitSec > 0")
+        when defined(debug):
+            if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
+            if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
+            if timeLimitSec < 0: raise newException(ValueError, "timeLimitSec must be nonnegative")
+            if minBeamWidth < 0 or minBeamWidth > beamWidth:
+                raise newException(ValueError, "minBeamWidth must be in 0..beamWidth")
+            if widthUpdateInterval <= 0:
+                raise newException(ValueError, "widthUpdateInterval must be positive")
+            if minBeamWidth > 0 and timeLimitSec <= 0:
+                raise newException(ValueError, "adaptive width requires timeLimitSec > 0")
         let start = getMonoTime()
         var tree = BeamTree[State, Action](state: initial,
             nodes: ObjectPool[BeamNode[Action]](

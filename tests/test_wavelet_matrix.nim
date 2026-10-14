@@ -64,7 +64,8 @@ suite "standalone wavelet matrix":
         check emptyCompressed.rangeFreq(0..<0, int.high) == 0
         check emptyCompressed.rank(0, 0) == 0
         check emptyCompressed.prevValue(0..<0, 0).isNone
-        expect IndexDefect: discard emptyCompressed[0]
+        when defined(debug):
+            expect IndexDefect: discard emptyCompressed[0]
         let zeros = initStaticWaveletMatrix(newSeq[int](128))
         check zeros.rank(0, 128) == 128
         check zeros.rangeFreq(0..<128, 1) == 128
@@ -81,24 +82,27 @@ suite "standalone wavelet matrix":
         a[0] = 99
         check raw[0] == 3 and comp[0] == 3
 
-    test "invalid arguments fail even in release":
-        expect ValueError: discard initStaticWaveletMatrix(@[-1])
-        expect ValueError: discard initStaticWaveletMatrix(@[4], 2)
-        expect ValueError: discard initStaticWaveletMatrix(@[0], -1)
-        expect ValueError: discard initStaticWaveletMatrix(@[0], 65)
-        let raw = initStaticWaveletMatrix(@[0, 1])
-        let comp = initCompressedStaticWaveletMatrix(@[-1, 1])
-        expect IndexDefect: discard raw[-1]
-        expect IndexDefect: discard raw[2]
-        expect IndexDefect: discard raw.rank(0, 3)
-        expect IndexDefect: discard comp.rank(999, 3)
-        expect IndexDefect: discard raw.kthSmallest(0..<0, 0)
-        expect IndexDefect: discard comp.kthLargest(0..<2, 2)
-        expect IndexDefect: discard raw.kthLargest(0..<2, int.low)
-        expect IndexDefect: discard raw.rangeFreq(-1..<1, 1)
-        expect IndexDefect: discard raw.rangeFreq(2..<1, 1)
-        expect IndexDefect: discard raw.rangeFreq(0..int.high, 1)
-        expect ValueError: discard comp.rangeFreq(0..<2, 5, -5)
+    when defined(debug):
+        test "invalid arguments fail in debug builds":
+            expect ValueError: discard initStaticWaveletMatrix(@[-1])
+            expect ValueError: discard initStaticWaveletMatrix(@[4], 2)
+            expect ValueError: discard initStaticWaveletMatrix(@[0], -1)
+            expect ValueError: discard initStaticWaveletMatrix(@[0], 65)
+            let raw = initStaticWaveletMatrix(@[0, 1])
+            let comp = initCompressedStaticWaveletMatrix(@[-1, 1])
+            expect IndexDefect: discard raw[-1]
+            expect IndexDefect: discard raw[2]
+            expect IndexDefect: discard raw.rank(0, 3)
+            expect IndexDefect: discard comp.rank(999, 3)
+            expect IndexDefect: discard raw.kthSmallest(0..<0, 0)
+            expect IndexDefect: discard comp.kthLargest(0..<2, 2)
+            expect IndexDefect: discard raw.kthLargest(0..<2, int.low)
+            expect IndexDefect: discard raw.rangeFreq(-1..<1, 1)
+            expect IndexDefect: discard raw.rangeFreq(2..<1, 1)
+            expect IndexDefect: discard raw.rangeFreq(0..int.high, 1)
+            expect ValueError: discard comp.rangeFreq(0..<2, 5, -5)
+
+    test "empty raw matrix queries":
         let empty = initStaticWaveletMatrix(newSeq[int]())
         check empty.rangeFreq(0..<0, 1) == 0
         check empty.rank(0, 0) == 0

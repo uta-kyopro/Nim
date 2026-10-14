@@ -8,11 +8,15 @@
 
 通常の入力は、起動時に標準入力を固定バッファへ読み込みます。バッファ容量は64 MiBです。対話問題ではコンパイル時に `-d:interactive` を指定し、出力後に `flush()` を呼んでください。
 
+各ライブラリの実行時の境界・引数・内部整合性チェックは `-d:debug` のときだけ行います。通常ビルドでは各APIの前提を満たす値を渡してください。コンパイル時の型・サイズ制約は常に検査します。
+
 ## ビームサーチ
 
 編集用テンプレートは `src/lib/search/thunder_beam.nim`、探索エンジンは `src/lib/search/thunder_beam_core.nim` です。使い方と実問題の例は [Thunder Beam Search](docs/thunder_beam.md) を参照してください。
 
 ## フォルダ構成
+
+二次元配列の初期化・直接更新・変換については [FlatSeq2D](docs/flat_seq_2d.md) を参照してください。
 
 ```text
 .
