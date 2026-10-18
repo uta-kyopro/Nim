@@ -45,6 +45,8 @@ echo answer.actions
 | `timeLimitSec` | `0.0` | 0は無制限。呼び出し開始からの秒数 |
 | `minBeamWidth` | `0` | 0は固定幅。正なら時間に応じてこの幅まで縮小（時間制限必須） |
 | `widthUpdateInterval` | `256` | 幅を見直すターン間隔 |
+| `groupLimit` | `0` | 0は従来の全体幅選抜。正なら各グループの保持上限 |
+| `groupCount` | `0` | グループ数。IDは `0..<groupCount` |
 | `stopOnTimeLimit` | `true` | `false`なら時間は幅調整にのみ使用（元コードの動作） |
 
 可変幅は累積幅・経過時間率・残りターンから推定し、減らす方向にだけ調整する。元コード同様、登録済み候補の幅は維持し、selector再利用時から新しい幅を適用する。時間による打ち切りはターン終了時に確認するため、厳密な時刻ではない。
@@ -94,3 +96,51 @@ self.pushCandidate(frontier, parent, action, step = 1)
 
 未完了なら最後に選抜できた層の最良候補を返す。まだ選抜していなければ初期状態と空の行動列。
 固定ターン問題では `isFinished` と候補の `finished` を常に `false` にする。
+
+## グループ別選抜と遅延Hash計算
+
+追加引数は既存引数の末尾にあり、従来の呼び出し・選抜動作は変わらない。
+`runThunderBeam`、`defineThunderBeam`で定義した関数、テンプレートの`beamSearch`が対応する。
+`groupLimit > 0`なら、各到達ターンでグループID順に処理し、各グループの上位K件を残す。
+全体の`beamWidth`による打ち切りはなく、最大`groupCount * groupLimit`件を保持する。
+グループ内は評価値で安定ソートし、同点は登録順。同じキーはグループをまたいで重複除去する。
+複数グループに同じキーを登録した場合は、小さいグループIDの採用候補が優先されるため、
+同一状態には同じグループIDを割り当てることを推奨する。重複はK件の枠を消費しない。
+完了候補は従来どおり選抜枠と独立し、最初の登録を保持する。
+
+グループ方式は固定上限で使用し、`minBeamWidth = 0`にする。併用はdebugでエラー。
+全候補を一旦保存するため、登録M件・グループ数Gに対し追加メモリO(M + G)、選抜時間は
+O(G + M + Σ M_g log M_g)（Hash集合の操作は平均O(1)）。全体幅方式の候補登録O(log W)とは異なる。
+将来ターンのバケットに候補があれば、途中の層が空でも探索を継続し、親ノードも保持する。
+
+```nim
+# expand内。scoreとfinishedを先に計算し、採用の余地がある場合だけkeyを計算する。
+if step <= frontier.remainingTurns():
+    let score = previewScore(action)       # 利用側で実装
+    let finished = previewFinished(action) # 利用側で実装
+    let group = destinationGroup(action)   # 利用側で実装
+    if frontier.canImprove(score, step = step, finished = finished, group = group):
+        let key = previewHash(action)     # 利用側で実装
+        frontier.push(action, score, key, parent, finished, step, group)
+
+# 呼び出し側。グループを位置などに割り当てる。
+let answer = beamSearch(initial, beamWidth = 1000, groupLimit = 10, groupCount = 256)
+echo answer.selectedCandidates
+```
+
+`remainingTurns()`は現在の展開位置から残るターン数。`step`がこれを超える候補は登録できない。
+`canImprove`は副作用のない事前判定で、falseなら同条件の`push`は不採用。
+trueは採用保証ではなく、同じキーの既存候補などで不採用になり得る。
+標準方式では到達ターンの選抜閾値を使い、満杯なら同点も不採用。
+グループ方式の未完了候補には保守的にtrueを返す。完了候補は閾値で足切りしないため、
+必ず正しい`finished`を渡す。`pushCandidate`もこの順序で評価・Hash計算・巻き戻しを行う。
+
+`selectedCandidates: int64`は処理済み各到達ターンの選抜後の未完了候補数に、
+その層の完了候補数（0または1）を足した累計。初期完了・ゼロターンでは0。
+候補生成数、DFS展開数、返した行動数とは異なり、完了時の層の未完了候補も含む。
+時間切れでも処理済み層までの累計を返す。
+
+Nim 2.2.4のdebug/releaseで、従来APIとの互換性、グループ別選抜、
+重複除去、事前足切り、選抜件数、複数ターン遷移、経路復元を検証した。
+グループ別選抜はランダムDAG 100個×保持上限3通り×評価方向2通りの600条件で、
+状態をコピーする参照実装とスコア・到達ターン・選抜件数を比較している。

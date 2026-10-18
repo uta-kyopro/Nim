@@ -41,13 +41,17 @@ when not declared ThunderBeamModule:
 
     # 候補登録の共通処理（通常は編集不要）。
     proc pushCandidate*(self: var State, frontier: var Frontier, parent: int,
-        action: Action, step = 1): bool {.discardable.} =
+        action: Action, step = 1, group = -1): bool {.discardable.} =
+        if step > frontier.remainingTurns(): return false
         self.moveForward(action)
         let score = self.evaluate()
-        let key = self.getHash()
         let finished = self.isFinished()
+        if not frontier.canImprove(score, step, finished, group):
+            self.moveBackward(action)
+            return false
+        let key = self.getHash()
         self.moveBackward(action)
-        frontier.push(action, score, key, parent, finished, step)
+        frontier.push(action, score, key, parent, finished, step, group)
 
     # -------------------------------------------------------------------
     # 問題ごとに編集：候補列挙
@@ -65,10 +69,10 @@ when not declared ThunderBeamModule:
     proc beamSearch*(initial: State, beamWidth: int, maxTurns = 2000,
         minimize = true, timeLimitSec = 0.0,
         minBeamWidth = 0, widthUpdateInterval = 256,
-        stopOnTimeLimit = true): BeamResult[Action, CostType] =
+        stopOnTimeLimit = true, groupLimit = 0, groupCount = 0): BeamResult[Action, CostType] =
         runThunderBeam[State, Action, CostType, HashType](
             initial, beamWidth, maxTurns, minimize, timeLimitSec, minBeamWidth,
-            widthUpdateInterval, stopOnTimeLimit)
+            widthUpdateInterval, stopOnTimeLimit, groupLimit, groupCount)
 
 # let answer = beamSearch(initialState, beamWidth = 1000)
 # echo answer.score
