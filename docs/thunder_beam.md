@@ -25,11 +25,13 @@ nim cpp -d:release --mm:arc -o:build/ahc026 src/examples/thunder_beam/ahc026.nim
 
 `src/lib/search/thunder_beam.nim` の「問題ごとに編集」だけを書き換える。未実装の関数は例外を出す。
 探索エンジンの引数・内部整合性チェックは `-d:debug` のときだけ行う。通常ビルドでは有効な引数・遷移を渡す必要がある。
+coreは共通の`header.nim`をincludeする。headerから読み込むNim ACLなども利用環境に必要。
 問題ごとにコピーして使う場合は、先頭の `thunder_beam_core` のimport先を配置に合わせる。
 
 ## 呼び出し
 
 ```nim
+include ../src/lib/header # 実際の配置に合わせる
 import ../src/lib/search/thunder_beam # 実際の配置に合わせる
 
 # テンプレートの型・関数を書き換え、初期Stateを用意する。

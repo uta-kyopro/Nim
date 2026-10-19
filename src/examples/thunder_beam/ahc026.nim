@@ -1,6 +1,6 @@
 # AHC026 A - Stack of Boxes
 # https://atcoder.jp/contests/ahc026/tasks/ahc026_a
-import std/[strutils, algorithm, deques]
+include ../../lib/header
 import ../../lib/search/thunder_beam_core
 
 const
@@ -46,7 +46,7 @@ proc prepareHash() =
             rng = rng xor (rng shl 17)
             value = rng
 
-proc top(s: State, stack: int): int {.inline.} =
+proc top(s: State, stack: int): int =
     if s.size[stack] == 0: n + 1 + stack
     else: s.boxes[stack][s.size[stack] - 1]
 
@@ -332,11 +332,7 @@ proc solve(initial: State, beamWidth = Ahc026BeamWidth,
     stderr.writeLine("score: ", max(1, 10000 - bestCost))
 
 when isMainModule and not declared(Ahc026Testing):
-    let tokens = stdin.readAll().splitWhitespace()
-    var cursor = 0
-    proc nextInt(): int =
-        result = parseInt(tokens[cursor])
-        inc cursor
+    proc nextInt(): int = input(int)
     n = nextInt()
     m = nextInt()
     doAssert n in 1..MaxN and m in 3..MaxM and n mod m == 0
@@ -344,5 +340,4 @@ when isMainModule and not declared(Ahc026Testing):
     var initial = State(target: 1)
     for stack in 0..<m:
         for _ in 0..<n div m: initial.append(stack, nextInt())
-    doAssert cursor == tokens.len
     for op in solve(initial): echo op.box, " ", op.destination + 1

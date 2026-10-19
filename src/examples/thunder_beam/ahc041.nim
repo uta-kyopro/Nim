@@ -1,6 +1,6 @@
 # AHC041 A - Christmas Tree Cutting
 # https://atcoder.jp/contests/ahc041/tasks/ahc041_a
-import std/[algorithm, strutils]
+include ../../lib/header
 import ../../lib/search/thunder_beam_core
 
 const
@@ -110,11 +110,7 @@ proc solve(beamWidth = Ahc041BeamWidth, minBeamWidth = Ahc041MinBeamWidth,
     stderr.writeLine("score: ", answer.score)
 
 when isMainModule:
-    let tokens = stdin.readAll().splitWhitespace()
-    var cursor = 0
-    proc nextInt(): int =
-        result = parseInt(tokens[cursor])
-        inc cursor
+    proc nextInt(): int = input(int)
     n = nextInt()
     let m = nextInt()
     height = nextInt()
@@ -128,7 +124,6 @@ when isMainModule:
     for _ in 0..<n: # 座標はこの構築法では使わない。
         discard nextInt()
         discard nextInt()
-    doAssert cursor == tokens.len
     prepare()
     let parents = solve()
     for v, p in parents:

@@ -66,7 +66,7 @@ when not declared SimdRandModule:       # 乱数生成高速化
     # 0..ma。前提: 0 <= ma <= 2^32-1（かつintに収まること）。
     # -d:debug のみ引数を検査する。通常ビルドで前提違反の結果は保証しない。
     # ma == 0 は乱数を消費しない。同じseedでも旧実装とは生成列が変わる。
-    proc rand(r: var SimdRng, ma: int): int {.inline.} =
+    proc rand(r: var SimdRng, ma: int): int =
         when defined(debug):
             doAssert ma >= 0 and uint64(ma) <= 0xFFFFFFFF'u64,
                 "SimdRng.rand requires 0 <= ma <= 2^32-1"
@@ -77,7 +77,7 @@ when not declared SimdRandModule:       # 乱数生成高速化
         r.i = (r.i+1) and 7
 
     # 0..<ma。前提: 1 <= ma <= 2^32（かつintに収まること）。
-    proc randrange(r: var SimdRng, ma: int): int {.inline.} =
+    proc randrange(r: var SimdRng, ma: int): int =
         when defined(debug):
             doAssert ma > 0 and uint64(ma) <= 0x100000000'u64,
                 "SimdRng.randrange requires 1 <= ma <= 2^32"

@@ -14,15 +14,15 @@ type
         values: seq[T]
         matrix: StaticWaveletMatrix[int]
 
-proc rankOne(bits: WmBits, stop: int): int {.inline.} =
+proc rankOne(bits: WmBits, stop: int): int =
     let word = stop shr 6
     let offset = stop and 63
     result = bits.prefix[word]
     if offset != 0:
         result += countSetBits(bits.words[word] and ((1'u64 shl offset) - 1))
 
-proc len*[T](wm: StaticWaveletMatrix[T]): int {.inline.} = wm.length
-proc len*[T](wm: CompressedStaticWaveletMatrix[T]): int {.inline.} = wm.matrix.len
+proc len*[T](wm: StaticWaveletMatrix[T]): int = wm.length
+proc len*[T](wm: CompressedStaticWaveletMatrix[T]): int = wm.matrix.len
 
 proc endpoints(length: int, p: Slice[int]): (int, int) =
     when defined(debug):
@@ -30,7 +30,7 @@ proc endpoints(length: int, p: Slice[int]): (int, int) =
             raise newException(IndexDefect, "invalid wavelet matrix range")
     (p.a, p.b + 1)
 
-proc fits[T: SomeInteger](x: T, levels: int): bool {.inline.} =
+proc fits[T: SomeInteger](x: T, levels: int): bool =
     when T is SomeSignedInt:
         if x < 0: return false
     levels == 64 or (uint64(x) shr levels) == 0

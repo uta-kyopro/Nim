@@ -37,19 +37,19 @@ proc initLazyImplicitTreap*[S, F](
     result.mapping = mapping
     result.composition = composition
 
-proc nodeSize[S, F](self: LazyImplicitTreap[S, F], node: int): int {.inline.} =
+proc nodeSize[S, F](self: LazyImplicitTreap[S, F], node: int): int =
     if node < 0: 0 else: self.nodes[node].size
 
-proc len*[S, F](self: LazyImplicitTreap[S, F]): int {.inline.} =
+proc len*[S, F](self: LazyImplicitTreap[S, F]): int =
     self.nodeSize(self.root)
 
 proc aggregate[S, F](self: LazyImplicitTreap[S, F], node: int,
-    backward = false): S {.inline.} =
+    backward = false): S =
     if node < 0: self.identity
     elif backward: self.nodes[node].backward
     else: self.nodes[node].forward
 
-proc allProd*[S, F](self: LazyImplicitTreap[S, F]): S {.inline.} =
+proc allProd*[S, F](self: LazyImplicitTreap[S, F]): S =
     self.aggregate(self.root)
 
 proc nextPriority[S, F](self: var LazyImplicitTreap[S, F]): uint32 =
@@ -139,7 +139,7 @@ proc split[S, F](self: var LazyImplicitTreap[S, F], root, count: int): (int, int
         self.update(root)
         result = (root, right)
 
-proc checkRange[S, F](self: LazyImplicitTreap[S, F], first, last: int) {.inline.} =
+proc checkRange[S, F](self: LazyImplicitTreap[S, F], first, last: int) =
     when defined(debug):
         assert 0 <= first and first <= last and last <= self.len,
             "LazyImplicitTreap range is out of bounds"

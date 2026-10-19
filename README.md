@@ -52,6 +52,8 @@
         ├── tree/
         │   └── kd_tree.nim                        # 最近傍・k近傍・半径・直方体検索を行うKD-tree
         ├── search/
+        │   ├── beam_search.nim                    # Stateをコピーする通常のビームサーチのテンプレート
+        │   ├── beam_search_core.nim               # 2層のNode配列・Hash重複排除・セグ木選抜
         │   ├── thunder_beam.nim                   # 問題ごとの型・評価・遷移・展開を編集するテンプレート
         │   └── thunder_beam_core.nim              # 差分更新・複数ターン遷移対応の探索エンジン
         └── utils/

@@ -29,13 +29,13 @@ when not declared ImplicitTreapModule:
         result.nodes = newSeqOfCap[ImplicitTreapNode[T]](capacity)
         result.freeList = newSeqOfCap[int](capacity)
 
-    proc len[T](self: ImplicitTreap[T]): int {.inline.} =
+    proc len[T](self: ImplicitTreap[T]): int =
         if self.root < 0: 0 else: self.nodes[self.root].size
 
-    proc nodeSize[T](self: ImplicitTreap[T], node: int): int {.inline.} =
+    proc nodeSize[T](self: ImplicitTreap[T], node: int): int =
         if node < 0: 0 else: self.nodes[node].size
 
-    proc nextPriority[T](self: var ImplicitTreap[T]): uint32 {.inline.} =
+    proc nextPriority[T](self: var ImplicitTreap[T]): uint32 =
         # xorshift64*: priority生成にのみ使用する軽量PRNG。
         var x = self.rngState
         x = x xor (x shr 12)
@@ -56,15 +56,15 @@ when not declared ImplicitTreapModule:
                 value: value, left: -1, right: -1, size: 1,
                 priority: self.nextPriority()))
 
-    proc update[T](self: var ImplicitTreap[T], node: int) {.inline.} =
+    proc update[T](self: var ImplicitTreap[T], node: int) =
         self.nodes[node].size = 1 + self.nodeSize(self.nodes[node].left) +
             self.nodeSize(self.nodes[node].right)
 
-    proc toggleReverse[T](self: var ImplicitTreap[T], node: int) {.inline.} =
+    proc toggleReverse[T](self: var ImplicitTreap[T], node: int) =
         if node >= 0:
             self.nodes[node].reversed = not self.nodes[node].reversed
 
-    proc push[T](self: var ImplicitTreap[T], node: int) {.inline.} =
+    proc push[T](self: var ImplicitTreap[T], node: int) =
         if node >= 0 and self.nodes[node].reversed:
             swap(self.nodes[node].left, self.nodes[node].right)
             self.toggleReverse(self.nodes[node].left)
@@ -109,14 +109,14 @@ when not declared ImplicitTreapModule:
         let node = self.newNode(value)
         self.root = self.merge(self.merge(left, node), right)
 
-    proc addFirst[T](self: var ImplicitTreap[T], value: sink T) {.inline.} =
+    proc addFirst[T](self: var ImplicitTreap[T], value: sink T) =
         self.insert(0, value)
 
-    proc addLast[T](self: var ImplicitTreap[T], value: sink T) {.inline.} =
+    proc addLast[T](self: var ImplicitTreap[T], value: sink T) =
         self.insert(self.len, value)
 
     # seq互換の末尾追加。期待 O(log n)。
-    proc add[T](self: var ImplicitTreap[T], value: sink T) {.inline.} =
+    proc add[T](self: var ImplicitTreap[T], value: sink T) =
         self.addLast(value)
 
     proc delete[T](self: var ImplicitTreap[T], pos: Natural): T {.discardable.} =
@@ -188,7 +188,7 @@ when not declared ImplicitTreapModule:
         self.delete(self.len - 1)
 
     # seq互換の末尾削除。期待 O(log n)、空でないことが前提。
-    proc pop[T](self: var ImplicitTreap[T]): T {.inline, discardable.} =
+    proc pop[T](self: var ImplicitTreap[T]): T {.discardable.} =
         self.popLast()
 
     proc peakFirst[T](self: var ImplicitTreap[T]): var T =

@@ -31,7 +31,7 @@ when not declared ArrayDequeModule:
             assert self.len < N - 1, "ArrayDeque capacity exceeded"
         self.data[self.tail] = v
         self.tail = (self.tail+1) and (N - 1)
-    proc shiftForward[N, T](self: var ArrayDeque[N, T]) {.inline.} =
+    proc shiftForward[N, T](self: var ArrayDeque[N, T]) =
         when defined(debug):
             assert self.len > 0, "cannot shift an empty ArrayDeque"
         self.data[self.tail] = self.data[self.head]

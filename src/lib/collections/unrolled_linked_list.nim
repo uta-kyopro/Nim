@@ -29,7 +29,7 @@ when not declared UnrolledLinkedListModule:
         result.blocks = newSeqOfCap[UnrolledBlock[T]](blockCapacity)
         result.freeList = newSeqOfCap[int](blockCapacity)
 
-    proc len[T](self: UnrolledLinkedList[T]): int {.inline.} = self.length
+    proc len[T](self: UnrolledLinkedList[T]): int = self.length
 
     proc newBlock[T](self: var UnrolledLinkedList[T], data: sink seq[T] = @[]): int =
         if self.freeList.len > 0:
@@ -142,10 +142,10 @@ when not declared UnrolledLinkedListModule:
             self.splitLargeBlock(node)
         self.length.inc
 
-    proc addFirst[T](self: var UnrolledLinkedList[T], value: sink T) {.inline.} =
+    proc addFirst[T](self: var UnrolledLinkedList[T], value: sink T) =
         self.insert(0, value)
 
-    proc addLast[T](self: var UnrolledLinkedList[T], value: sink T) {.inline.} =
+    proc addLast[T](self: var UnrolledLinkedList[T], value: sink T) =
         self.insert(self.length, value)
 
     proc delete[T](self: var UnrolledLinkedList[T], pos: Natural): T {.discardable.} =

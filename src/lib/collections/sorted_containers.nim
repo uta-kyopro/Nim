@@ -28,7 +28,7 @@ when not declared SortedContainersModule:
     proc initSqrtSortedBlocks[T](blockSize: Positive): SqrtSortedBlocks[T] =
         result.blockSize = blockSize
 
-    proc lowerBoundLocal[T](data: openArray[T], value: T): int {.inline.} =
+    proc lowerBoundLocal[T](data: openArray[T], value: T): int =
         var left = 0
         var right = data.len
         while left < right:
@@ -37,7 +37,7 @@ when not declared SortedContainersModule:
             else: right = middle
         left
 
-    proc upperBoundLocal[T](data: openArray[T], value: T): int {.inline.} =
+    proc upperBoundLocal[T](data: openArray[T], value: T): int =
         var left = 0
         var right = data.len
         while left < right:
@@ -46,7 +46,7 @@ when not declared SortedContainersModule:
             else: left = middle + 1
         left
 
-    proc locateValue[T](self: SqrtSortedBlocks[T], value: T): int {.inline.} =
+    proc locateValue[T](self: SqrtSortedBlocks[T], value: T): int =
         var left = 0
         var right = self.blocks.len
         while left < right:
@@ -153,7 +153,7 @@ when not declared SortedContainersModule:
 
     proc initSqrtSet[T](blockSize: Positive = DefaultSqrtBlockSize): SqrtSet[T] =
         result.values = initSqrtSortedBlocks[T](blockSize)
-    proc len[T](self: SqrtSet[T]): int {.inline.} = self.values.length
+    proc len[T](self: SqrtSet[T]): int = self.values.length
     proc incl[T](self: var SqrtSet[T], value: sink T): bool {.discardable.} =
         self.values.addValue(value, false)
     proc excl[T](self: var SqrtSet[T], value: T): bool {.discardable.} =
@@ -169,7 +169,7 @@ when not declared SortedContainersModule:
 
     proc initSqrtMultiSet[T](blockSize: Positive = DefaultSqrtBlockSize): SqrtMultiSet[T] =
         result.values = initSqrtSortedBlocks[T](blockSize)
-    proc len[T](self: SqrtMultiSet[T]): int {.inline.} = self.values.length
+    proc len[T](self: SqrtMultiSet[T]): int = self.values.length
     proc add[T](self: var SqrtMultiSet[T], value: sink T) =
         discard self.values.addValue(value, true)
     proc remove[T](self: var SqrtMultiSet[T], value: T): bool {.discardable.} =
@@ -189,7 +189,7 @@ when not declared SortedContainersModule:
     proc initSqrtDict[K, V](blockSize: Positive = DefaultSqrtBlockSize): SqrtDict[K, V] =
         result.keysData = initSqrtSortedBlocks[K](blockSize)
         result.values = initTable[K, V]()
-    proc len[K, V](self: SqrtDict[K, V]): int {.inline.} = self.keysData.length
+    proc len[K, V](self: SqrtDict[K, V]): int = self.keysData.length
     proc hasKey[K, V](self: SqrtDict[K, V], key: K): bool = self.values.hasKey(key)
     proc `[]`[K, V](self: SqrtDict[K, V], key: K): lent V = self.values[key]
     proc `[]`[K, V](self: var SqrtDict[K, V], key: K): var V = self.values[key]

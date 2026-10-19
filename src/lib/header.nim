@@ -28,7 +28,7 @@ when not declared InputHelper:
     else:
         proc cRead(fd: cint, p: pointer, n: csize_t): int {.importc:"read", header:"<unistd.h>".}
         template fastRead(p, n): int = cRead(0, p, csize_t(n))
-    proc refill(): bool {.inline.} =
+    proc refill(): bool =
         when defined(interactive):
             ip = 0
             ilen = 0
@@ -46,10 +46,16 @@ when not declared InputHelper:
                 if ibuf[ip] > ' ': break
                 inc ip
     else:
-        while refill(): discard
+        var inputLoaded = false
+        proc loadInput() =
+            if inputLoaded: return
+            while refill(): discard
+            inputLoaded = true
         template need() = discard
-        template skip() = (while ibuf[ip] <= ' ': inc ip)
-    proc nxtInt[T: SomeInteger](): T {.inline.} =
+        template skip() =
+            loadInput()
+            while ibuf[ip] <= ' ': inc ip
+    proc nxtInt[T: SomeInteger](): T =
         skip()
         let neg = ibuf[ip] == '-'
         ip += ord(neg)
@@ -60,7 +66,7 @@ when not declared InputHelper:
             result = result*10 + T(d)
             inc ip
         if neg: result = -result
-    proc nxtStr(): string {.inline.} =
+    proc nxtStr(): string =
         skip(); let l = ip
         while true:
             need()
@@ -68,8 +74,8 @@ when not declared InputHelper:
             inc ip
         result = newString(ip-l)
         copyMem(addr result[0], addr ibuf[l], ip-l)
-    proc nxtChar(): char {.inline.} = skip(); result = ibuf[ip]; inc ip
-    proc nxtFloat[T: SomeFloat](): T {.inline.} = T(nxtStr().parseFloat)
+    proc nxtChar(): char = skip(); result = ibuf[ip]; inc ip
+    proc nxtFloat[T: SomeFloat](): T = T(nxtStr().parseFloat)
     template input(t: typedesc[string]): string = nxtStr()
     template input(t: typedesc[char]): char = nxtChar()
     template input(t: typedesc[SomeInteger]): SomeInteger = nxtInt[t]()
@@ -122,7 +128,7 @@ when not declared UserOperator:
     proc `^=`(x: var bool, y: bool) = x = (x xor y)
     proc `^`(x, y: SomeInteger): SomeInteger = x xor y
     proc `^=`(x: var SomeInteger, y: SomeInteger) = x = (x xor y)
-    proc pop[T](s: var seq[T]): T {.inline, noSideEffect, discardable.} = system.pop(s)
+    proc pop[T](s: var seq[T]): T {.noSideEffect, discardable.} = system.pop(s)
     proc initHashSet[T]():Hashset[T] = initHashSet[T](0)
     proc clear[T](self:var Hashset[T]) = self = initHashSet[T](0)
 when not declared SortedTreeUtil:
@@ -139,6 +145,7 @@ when not declared ModIntdeclaration:
     # type mint = modint1000000007
     # var cmb: Combination[mint]
 when not declared TimeModule:   # プログラムの実行時間を計測するライブラリ
+    const TimeModule = true
     type Timer = object
         start: int64
     proc initTimer(): Timer =

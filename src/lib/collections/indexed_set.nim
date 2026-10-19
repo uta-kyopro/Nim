@@ -14,28 +14,28 @@ when not declared IndexedSetModule:
             assert size >= 0, "IndexSet size must be nonnegative"
         result.positions = newSeqWith(size, -1)
 
-    proc len(self: IndexSet): int {.inline.} =
+    proc len(self: IndexSet): int =
         self.data.len
 
-    proc contains(self: IndexSet, value: int): bool {.inline.} =
+    proc contains(self: IndexSet, value: int): bool =
         when defined(debug):
             assert value in 0..<self.positions.len,
                 "IndexSet value is out of range"
         self.positions[value] >= 0
 
-    proc find(self: IndexSet, value: int): int {.inline.} =
+    proc find(self: IndexSet, value: int): int =
         when defined(debug):
             assert value in 0..<self.positions.len,
                 "IndexSet value is out of range"
         self.positions[value]
 
-    proc incl(self: var IndexSet, value: int) {.inline.} =
+    proc incl(self: var IndexSet, value: int) =
         if value in self:
             return
         self.positions[value] = self.data.len
         self.data.add(value)
 
-    proc excl(self: var IndexSet, value: int) {.inline.} =
+    proc excl(self: var IndexSet, value: int) =
         if value notin self:
             return
         let index = self.positions[value]
@@ -45,7 +45,7 @@ when not declared IndexedSetModule:
         self.data.setLen(self.data.len-1)
         self.positions[value] = -1
 
-    proc `[]`(self: IndexSet, index: Natural): int {.inline.} =
+    proc `[]`(self: IndexSet, index: Natural): int =
         when defined(debug):
             assert index < self.data.len, "IndexSet index is out of range"
         self.data[index]
@@ -72,22 +72,22 @@ when not declared IndexedSetModule:
         for value in values:
             result.incl(value)
 
-    proc len[T](self: IndexedSet[T]): int {.inline.} =
+    proc len[T](self: IndexedSet[T]): int =
         self.data.len
 
-    proc contains[T](self: IndexedSet[T], value: T): bool {.inline.} =
+    proc contains[T](self: IndexedSet[T], value: T): bool =
         value in self.positions
 
-    proc find[T](self: IndexedSet[T], value: T): int {.inline.} =
+    proc find[T](self: IndexedSet[T], value: T): int =
         self.positions.getOrDefault(value, -1)
 
-    proc incl[T](self: var IndexedSet[T], value: T) {.inline.} =
+    proc incl[T](self: var IndexedSet[T], value: T) =
         if value in self.positions:
             return
         self.positions[value] = self.data.len
         self.data.add(value)
 
-    proc excl[T](self: var IndexedSet[T], value: T) {.inline.} =
+    proc excl[T](self: var IndexedSet[T], value: T) =
         let index = self.find(value)
         if index < 0:
             return
@@ -97,7 +97,7 @@ when not declared IndexedSetModule:
         self.data.setLen(self.data.len-1)
         self.positions.del(value)
 
-    proc `[]`[T](self: IndexedSet[T], index: Natural): lent T {.inline.} =
+    proc `[]`[T](self: IndexedSet[T], index: Natural): lent T =
         when defined(debug):
             assert index < self.data.len, "IndexedSet index is out of range"
         self.data[index]

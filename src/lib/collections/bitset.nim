@@ -19,11 +19,11 @@ when not declared StaticBitSetModule:
     proc popCount[N](b: StaticBitSet[N]): int =
         for word in b.data:
             result += word.popCount
-    proc `[]`(b: StaticBitSet, n: SomeInteger): bool {.inline.}=
+    proc `[]`(b: StaticBitSet, n: SomeInteger): bool =
         let q = n shr StaticBitSetWordBitsLog2
         let r = n and (StaticBitSetWordBits-1)
         return b.data[q].testBit(r)
-    proc `[]=`(b:var StaticBitSet, n: SomeInteger, t: int) {.inline.}=
+    proc `[]=`(b:var StaticBitSet, n: SomeInteger, t: int) =
         let q = n shr StaticBitSetWordBitsLog2
         let r = n and (StaticBitSetWordBits-1)
         if t==0: b.data[q].clearBit(r)

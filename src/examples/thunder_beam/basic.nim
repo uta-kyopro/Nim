@@ -1,3 +1,4 @@
+include ../../lib/header
 import ../../lib/search/thunder_beam_core
 
 # thunder_beam.nim の「問題ごとに編集」を埋めた例。

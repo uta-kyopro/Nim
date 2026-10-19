@@ -1,6 +1,6 @@
 # AHC021 A - Pyramid Sorting (元のthunder_beam.nimの問題固有部分)
 # https://atcoder.jp/contests/ahc021/tasks/ahc021_a
-import std/strutils
+include ../../lib/header
 import ../../lib/search/thunder_beam_core
 
 const
@@ -28,10 +28,10 @@ type
     Frontier = BeamFrontier[Action, CostType, HashType]
 
 static: doAssert sizeof(int) == 8
-proc add[T](s: var Stack[T], value: T) {.inline.} =
+proc add[T](s: var Stack[T], value: T) =
     s.data[s.len] = value
     inc s.len
-proc pop[T](s: var Stack[T]): T {.inline.} =
+proc pop[T](s: var Stack[T]): T =
     dec s.len
     s.data[s.len]
 
@@ -230,9 +230,7 @@ proc output(initial: State, actions: openArray[Action]) =
     stderr.writeLine("score: ", score)
 
 when isMainModule:
-    var values: seq[int]
-    for token in stdin.readAll().splitWhitespace(): values.add(parseInt(token))
-    doAssert values.len == M
+    let values = input(int, M)
     let initial = initState(values)
     let answer = solve(initial)
     output(initial, answer.actions)

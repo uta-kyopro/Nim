@@ -23,13 +23,13 @@ when not declared KdTreeModule:
 
         KdNeighbor = tuple[index: int, distanceSquared: float64]
 
-    proc squaredDistance[K, T](a, b: KdPoint[K, T]): float64 {.inline.} =
+    proc squaredDistance[K, T](a, b: KdPoint[K, T]): float64 =
         for axis in 0..<K:
             let d = float64(a[axis]) - float64(b[axis])
             result += d * d
 
     proc pointLess[K, T](points: openArray[KdPoint[K, T]],
-        a, b, axis: int): bool {.inline.} =
+        a, b, axis: int): bool =
         if points[a][axis] != points[b][axis]:
             points[a][axis] < points[b][axis]
         else:
@@ -87,7 +87,7 @@ when not declared KdTreeModule:
         result.root = build(0, points.len, 0)
         result.nodes = move(builtNodes)
 
-    proc len[K, T](self: KdTree[K, T]): int {.inline.} = self.nodes.len
+    proc len[K, T](self: KdTree[K, T]): int = self.nodes.len
 
     proc nearest[K, T](self: KdTree[K, T],
         query: KdPoint[K, T]): KdNeighbor =

@@ -75,13 +75,13 @@ when not declared ObjectPoolModule:
                 "ObjectPool index is not active"
         self.data[index] = value
 
-    proc len[T](self: ObjectPool[T]): int {.inline.} = self.activeCount
+    proc len[T](self: ObjectPool[T]): int = self.activeCount
 
-    proc size[T](self: ObjectPool[T]): int {.inline.} =
+    proc size[T](self: ObjectPool[T]): int =
         # 参照実装と同じく、過去に使用した最大index + 1。
         self.data.len
 
-    proc available[T](self: ObjectPool[T]): int {.inline.} =
+    proc available[T](self: ObjectPool[T]): int =
         self.freeList.len
 
     proc clear[T](self: var ObjectPool[T]) =

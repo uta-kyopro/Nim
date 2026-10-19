@@ -34,7 +34,7 @@ when not declared MinCostFlowCommonModule:
     proc initMinCostFlowData(nodeCount: Natural): MinCostFlowData =
         result.graph = newSeq[seq[ResidualCostEdge]](nodeCount)
 
-    proc len(self: MinCostFlowData): int {.inline.} = self.graph.len
+    proc len(self: MinCostFlowData): int = self.graph.len
 
     proc addEdge(self: var MinCostFlowData, src, dst: int,
         capacity: FlowCap, cost: FlowCost): int =
