@@ -14,6 +14,7 @@ when not declared TourBeamModule:
         State* = object # TODO: 盤面・差分計算用の情報を追加する。
             score*: CostType # TODO: 初期化し、適用・巻き戻しで差分更新する。
             hash*: HashType # TODO: 初期化し、適用・巻き戻しで差分更新する。
+            isFinished*: bool # TODO: 完了時にtrue。固定ターン探索はfalseのままでよい。
         Frontier* = TourBeamFrontier[Action, CostType, HashType]
 
     # 保持している評価値を返す。必要なら評価式へ書き換える。
@@ -22,17 +23,11 @@ when not declared TourBeamModule:
     # TODO: 将来の遷移に影響する状態を反映したHashを返す（既定はself.hash）。
     template getHash*(self: State): HashType = self.hash
 
-    # TODO: 完了条件を返す。固定ターンで最良を選ぶ問題なら常にfalseでよい。
-    template isFinished*(self: State): bool =
-        block:
-            discard self
-            false
-
-    # TODO: actionを適用し、評価値・Hashと差分計算用の情報も更新する。
+    # TODO: isFinishedも更新し、actionを適用し、評価値・Hashと差分計算用の情報も更新する。
     proc moveForward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveForward")
 
-    # TODO: 対応するmoveForwardの変更を、評価値・Hashも含めて完全に戻す。
+    # TODO: isFinishedも復元し、対応するmoveForwardの変更を、評価値・Hashも含めて完全に戻す。
     proc moveBackward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveBackward")
 

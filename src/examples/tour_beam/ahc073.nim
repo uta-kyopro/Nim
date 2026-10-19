@@ -9,6 +9,7 @@ type
         transition: uint64 # 魔法陣XOR差分45bit・コスト10bit・経路ID6bit。
         hashDelta: uint64
     SearchState = object
+        isFinished: bool
         problem: State
         hash: uint64
     Frontier = TourBeamFrontier[Action, int, uint64]
@@ -40,7 +41,6 @@ template evaluate(s: SearchState): int = s.problem.evaluate()
 # 差分更新済みのZobristHashを返す。
 template getHash(s: SearchState): uint64 = s.hash
 # 最終層の全候補を比較する。
-template isFinished(s: SearchState): bool = false
 
 # 遷移前後の魔法陣・コスト・経路IDを、巻き戻し可能な1つのActionにまとめる。
 proc makeAction(s: SearchState, route: Route, id: int): Action =

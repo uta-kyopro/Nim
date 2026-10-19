@@ -1,5 +1,5 @@
 include ../../lib/header
-import ../../lib/search/beam_search_core
+import ../../lib/search/regacy/beam_search_core
 include ./ahc073_problem
 
 type Frontier = BeamSearchFrontier[State, int, uint64, uint8]

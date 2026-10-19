@@ -1,9 +1,38 @@
-include ../header
+include ../../header
 
 ## 差分更新・巻き戻しによるビームサーチ。標準選抜 O(log W)、幅Wは実行時指定。
 ## 状態を候補ごとにコピーせず、共通経路を探索木で共有する。stepによる複数ターン遷移に対応。
 when not declared SkipBeamCoreModule:
     const SkipBeamCoreModule* = true
+
+    # 盤面専用フックがあれば使い、省略時は通常の適用処理を使う。
+    template beamBoardForward(state, action: untyped) =
+        mixin moveBoardForward, moveForward
+        when compiles(state.moveBoardForward(action)):
+            when not compiles(state.moveBoardBackward(action)):
+                {.error: "board-only transitions require both forward and backward hooks".}
+            state.moveBoardForward(action)
+        else:
+            state.moveForward(action)
+
+    # 盤面専用フックがあれば使い、省略時は通常の巻き戻し処理を使う。
+    template beamBoardBackward(state, action: untyped) =
+        mixin moveBoardBackward, moveBackward
+        when compiles(state.moveBoardBackward(action)):
+            when not compiles(state.moveBoardForward(action)):
+                {.error: "board-only transitions require both forward and backward hooks".}
+            state.moveBoardBackward(action)
+        else:
+            state.moveBackward(action)
+
+    # 展開直前に葉の生値を復元する。盤面専用フックを使う場合はloadLeafも実装する。
+    template beamLoadLeaf(state, leafScore, leafKey, ActionType: untyped) =
+        mixin loadLeaf, moveBoardForward, moveBoardBackward
+        when compiles(state.loadLeaf(leafScore, leafKey)):
+            state.loadLeaf(leafScore, leafKey)
+        elif compiles(state.moveBoardForward(default(ActionType))) or
+                compiles(state.moveBoardBackward(default(ActionType))):
+            {.error: "board-only transitions require loadLeaf".}
 
     type
         BeamStatus* = enum
@@ -39,6 +68,8 @@ when not declared SkipBeamCoreModule:
             groupLimit: int
             buckets: seq[seq[BeamCandidate[Action, Score, Key]]]
         BeamFrontier*[Action, Score, Key] = object
+            currentScore*: Score # 展開中の葉に保存されていた評価値。
+            currentHash*: Key # 展開中の葉に保存されていたHash。
             selectors: Deque[BeamSelector[Action, Score, Key]]
             width, stepMax, remaining: int
             currentParent: int
@@ -48,12 +79,31 @@ when not declared SkipBeamCoreModule:
             action: Action
             parent, child, left, right: int
             retainedUntil: int
+            leafValue: int32
             active: bool
-        BeamTree[State, Action] = object
+        BeamLeafValue[Score, Key] = object
+            score: Score
+            key: Key
+        BeamTree[State, Action, Score, Key] = object
             state: State
+            values: ObjectPool[BeamLeafValue[Score, Key]]
             nodes: ObjectPool[BeamNode[Action]]
             root, turn, saved: int
             removals: Deque[seq[int]]
+
+    # Stateに実在するboolフィールドだけを読み、旧判定関数形式は受け付けない。
+    template beamFinishedField(state: typed): bool =
+        const hasFinishedField = block:
+            var found = false
+            var probe: typeof(state)
+            for name, field in fieldPairs(probe):
+                when name == "isFinished":
+                    when field is bool: found = true
+            found
+        when not hasFinishedField:
+            {.error: "State must contain an isFinished: bool field".}
+        else:
+            state.isFinished
 
     # 指定インデックスのプール要素を参照し、可変プールならその要素を変更できる。
     template `[]`[T](pool: ObjectPool[T], i: int): untyped = pool.data[i]
@@ -249,11 +299,11 @@ when not declared SkipBeamCoreModule:
     # 仮適用・評価・事前足切り・必要時のHash取得・巻き戻し後、足切りを重複せず登録する。
     proc pushCandidate*[T, A, S, K](self: var T, frontier: var BeamFrontier[A, S, K],
         parent: int, action: A, step = 1, group = -1): bool {.discardable.} =
-        mixin moveForward, evaluate, isFinished, getHash, moveBackward
+        mixin moveForward, evaluate, getHash, moveBackward, moveBoardForward, moveBoardBackward, loadLeaf
         if step > frontier.remainingTurns(): return false
         self.moveForward(action)
         let score = self.evaluate()
-        let finished = self.isFinished()
+        let finished = beamFinishedField(self)
         if not frontier.canImprove(score, step, finished, group):
             self.moveBackward(action)
             return false
@@ -271,8 +321,19 @@ when not declared SkipBeamCoreModule:
         action: A, step: untyped = 1, group: untyped = -1): bool =
         beamPushCurrent(self, frontier, action, step, group)
 
+    # 展開待ちの葉だけにscore/keyを保持し、展開後はスロットを再利用する。
+    proc beamStoreValue[T, A, S, K](tree: var BeamTree[T, A, S, K], score: S, key: K): int32 =
+        var index: int
+        if tree.values.garbage.len > 0:
+            index = system.pop(tree.values.garbage)
+            tree.values.data[index] = BeamLeafValue[S, K](score: score, key: key)
+        else:
+            index = tree.values.data.len
+            tree.values.data.add(BeamLeafValue[S, K](score: score, key: key))
+        int32(index)
+
     # 空きインデックスを再利用し、なければプールを拡張してノードを確保する。
-    proc beamAllocate[T, A](tree: var BeamTree[T, A], node: BeamNode[A]): int =
+    proc beamAllocate[T, A, S, K](tree: var BeamTree[T, A, S, K], node: BeamNode[A]): int =
         if tree.nodes.garbage.len == 0:
             result = tree.nodes.data.len
             tree.nodes.data.add(node)
@@ -281,10 +342,11 @@ when not declared SkipBeamCoreModule:
             tree.nodes[result] = node
 
     # 選抜済み候補を親へ接続し、その葉へ至る枝を次の展開対象にする。
-    proc beamAddLeaf[T, A, S, K](tree: var BeamTree[T, A], candidate: BeamCandidate[A, S, K]): int {.discardable.} =
+    proc beamAddLeaf[T, A, S, K](tree: var BeamTree[T, A, S, K], candidate: BeamCandidate[A, S, K]): int {.discardable.} =
         let parent = candidate.parent
         let sibling = tree.nodes[parent].child
         let node = tree.beamAllocate(BeamNode[A](action: candidate.action,
+            leafValue: tree.beamStoreValue(candidate.score, candidate.key),
             parent: parent, child: -1, left: -1, right: sibling, active: true))
         result = node
         tree.nodes[parent].child = node
@@ -296,7 +358,7 @@ when not declared SkipBeamCoreModule:
             v = tree.nodes[v].parent
 
     # 保存中・将来参照中のノードを保護しながら、不要な葉と祖先を解放する。
-    proc beamRemoveLeaf[T, A](tree: var BeamTree[T, A], index: int) =
+    proc beamRemoveLeaf[T, A, S, K](tree: var BeamTree[T, A, S, K], index: int) =
         var v = index
         while v != tree.root:
             # 短い枝が枯れても、将来ターンの候補が参照する親は解放しない。
@@ -310,7 +372,7 @@ when not declared SkipBeamCoreModule:
             v = node.parent
 
     # 保持期限を迎えたノードを調べ、不要になった葉を削除する。
-    proc beamPrune[T, A](tree: var BeamTree[T, A]) =
+    proc beamPrune[T, A, S, K](tree: var BeamTree[T, A, S, K]) =
         if tree.removals.len == 0: return
         var expired = tree.removals.popFirst()
         for v in expired:
@@ -319,17 +381,17 @@ when not declared SkipBeamCoreModule:
         tree.removals.addLast(expired)
 
     # 分岐が1本だけで将来参照もなければ、Stateを進めて探索木の根を移す。
-    proc beamUpdateRoot[T, A](tree: var BeamTree[T, A]) =
+    proc beamUpdateRoot[T, A, S, K](tree: var BeamTree[T, A, S, K]) =
         mixin moveForward
         var child = tree.nodes[tree.root].child
         while child >= 0 and tree.nodes[child].right < 0 and
             tree.nodes[tree.root].retainedUntil < tree.turn:
             tree.root = child
-            tree.state.moveForward(tree.nodes[child].action)
+            beamBoardForward(tree.state, tree.nodes[child].action)
             child = tree.nodes[child].child
 
     # 有効な子をたどってStateを進め、次に展開する葉へ移動する。
-    proc beamMoveToLeaf[T, A](tree: var BeamTree[T, A], index: int): int =
+    proc beamMoveToLeaf[T, A, S, K](tree: var BeamTree[T, A, S, K], index: int): int =
         mixin moveForward
         var v = index
         var child = tree.nodes[v].child
@@ -340,28 +402,28 @@ when not declared SkipBeamCoreModule:
                 doAssert child >= 0, "beam active subtree has no active child"
             tree.nodes[v].active = false
             v = child
-            tree.state.moveForward(tree.nodes[v].action)
+            beamBoardForward(tree.state, tree.nodes[v].action)
             child = tree.nodes[v].child
         tree.nodes[v].active = false
         v
 
     # Stateを祖先へ巻き戻し、未展開の兄弟があればその枝へ移動する。
-    proc beamMoveToAncestor[T, A](tree: var BeamTree[T, A], index: int): int =
+    proc beamMoveToAncestor[T, A, S, K](tree: var BeamTree[T, A, S, K], index: int): int =
         mixin moveForward, moveBackward
         var v = index
         while v != tree.root:
-            tree.state.moveBackward(tree.nodes[v].action)
+            beamBoardBackward(tree.state, tree.nodes[v].action)
             var sibling = tree.nodes[v].right
             while sibling >= 0:
                 if tree.nodes[sibling].active:
-                    tree.state.moveForward(tree.nodes[sibling].action)
+                    beamBoardForward(tree.state, tree.nodes[sibling].action)
                     return sibling
                 sibling = tree.nodes[sibling].right
             v = tree.nodes[v].parent
         tree.root
 
     # 枝を整理して有効な葉をDFSで展開し、将来候補が使う親ノードを保持する。
-    proc beamDfs[T, A, S, K](tree: var BeamTree[T, A], frontier: var BeamFrontier[A, S, K]) =
+    proc beamDfs[T, A, S, K](tree: var BeamTree[T, A, S, K], frontier: var BeamFrontier[A, S, K]) =
         mixin expand
         tree.beamPrune()
         tree.beamUpdateRoot()
@@ -371,10 +433,16 @@ when not declared SkipBeamCoreModule:
             v = tree.beamMoveToLeaf(v)
             frontier.stepMax = 1
             frontier.currentParent = v
+            let leafValue = int(tree.nodes[v].leafValue)
+            frontier.currentScore = tree.values.data[leafValue].score
+            frontier.currentHash = tree.values.data[leafValue].key
+            beamLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
             when compiles(tree.state.expand(frontier)):
                 tree.state.expand(frontier)
             else:
                 tree.state.expand(v, frontier)
+            tree.values.garbage.add(leafValue)
+            tree.nodes[v].leafValue = -1
             tree.nodes[v].retainedUntil = tree.turn + frontier.stepMax - 1
             while tree.removals.len < frontier.stepMax: tree.removals.addLast(@[])
             tree.removals[frontier.stepMax-1].add(v)
@@ -382,7 +450,7 @@ when not declared SkipBeamCoreModule:
             if v == tree.root: break
 
     # 指定ノードから親をたどり、初期状態からの行動列を復元する。
-    proc beamPath[T, A](tree: BeamTree[T, A], index: int): seq[A] =
+    proc beamPath[T, A, S, K](tree: BeamTree[T, A, S, K], index: int): seq[A] =
         var v = index
         while tree.nodes[v].parent >= 0:
             result.add(tree.nodes[v].action)
@@ -417,7 +485,7 @@ when not declared SkipBeamCoreModule:
         maxTurns = 2000, minimize = true, timeLimitSec = 0.0,
         minBeamWidth = 0, widthUpdateInterval = 256,
         stopOnTimeLimit = true, groupLimit = 0, groupCount = 0): BeamResult[Action, Score] =
-        mixin evaluate, isFinished
+        mixin evaluate, getHash
         when defined(debug):
             if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
@@ -433,18 +501,19 @@ when not declared SkipBeamCoreModule:
             if groupLimit < 0 or groupCount < 0 or (groupLimit > 0 and groupCount <= 0):
                 raise newException(ValueError, "invalid group bucket dimensions")
         let start = if timeLimitSec > 0: getMonoTime() else: default(MonoTime)
-        var tree = BeamTree[State, Action](state: initial,
+        var tree = BeamTree[State, Action, Score, Key](state: initial,
             nodes: ObjectPool[BeamNode[Action]](
                 data: newSeqOfCap[BeamNode[Action]](beamWidth * 4),
                 garbage: newSeqOfCap[int](beamWidth * 4)))
         result.score = tree.state.evaluate()
-        if tree.state.isFinished():
+        if beamFinishedField(tree.state):
             result.status = beamFinished
             return
         result.status = beamMaxTurns
         if maxTurns == 0: return
         tree.root = tree.beamAllocate(BeamNode[Action](
-            parent: -1, child: -1, left: -1, right: -1, active: true))
+            parent: -1, child: -1, left: -1, right: -1, active: true,
+            leafValue: tree.beamStoreValue(result.score, tree.state.getHash())))
         var frontier = BeamFrontier[Action, Score, Key](width: beamWidth, minimize: minimize,
             groupLimit: groupLimit, groupCount: groupCount)
         var totalWidth = 0.0

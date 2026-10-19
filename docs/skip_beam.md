@@ -1,6 +1,8 @@
 # Skip Beam Search
 
-[編集用テンプレート](../src/lib/search/skip_beam.nim) / [探索エンジン](../src/lib/search/skip_beam_core.nim) / [使用例](../src/examples/skip_beam/basic.nim)
+今後の改善対象は[tourBeam](tour_beam.md)・[skipTourBeam](skip_tour_beam.md)。本実装は`src/lib/search/regacy/`へ退避した。
+
+[編集用テンプレート](../src/lib/search/regacy/skip_beam.nim) / [探索エンジン](../src/lib/search/regacy/skip_beam_core.nim) / [使用例](../src/examples/skip_beam/basic.nim)
 
 実問題の例: [AHC021 A](../src/examples/skip_beam/ahc021.nim)（[問題文](https://atcoder.jp/contests/ahc021/tasks/ahc021_a)）。元コードの整数Action・固定長履歴・近似ハッシュ・評価・1手/2手遷移を使用。貪欲補完は行わず、2000手上限では部分解を出す。
 
@@ -24,9 +26,9 @@ nim cpp -d:release --mm:arc -o:build/ahc026 src/examples/skip_beam/ahc026.nim
 比較時の無効値判定と、構築前の配列全消去を省く。末尾候補だけの部分木は常に同じindexを保持するため、
 末尾候補の改善・置換も、実際の葉から根へ更新すればよい。
 
-状態を適用・巻き戻しして巡回する差分更新ビームサーチ。編集用テンプレートと探索エンジンは `src/lib/search/` に配置している。
+状態を適用・巻き戻しして巡回する差分更新ビームサーチ。編集用テンプレートと探索エンジンは `src/lib/search/regacy/` に配置している。
 
-`src/lib/search/skip_beam.nim` の「問題ごとに編集」だけを書き換える。未実装の関数は例外を出す。
+`src/lib/search/regacy/skip_beam.nim` の「問題ごとに編集」だけを書き換える。未実装の関数は例外を出す。
 `evaluate`は既定で`State.score`、`getHash`は`State.hash`を返す。初期値を設定し、
 `moveForward`で評価値・Hashを差分更新、`moveBackward`で元の値へ戻す。
 必要なら`evaluate`や`getHash`を計算式へ書き換えられる。
@@ -38,7 +40,7 @@ coreは共通の`header.nim`をincludeする。headerから読み込むNim ACL�
 
 ```nim
 include ../src/lib/header # 実際の配置に合わせる
-import ../src/lib/search/skip_beam # 実際の配置に合わせる
+import ../src/lib/search/regacy/skip_beam # 実際の配置に合わせる
 
 # テンプレートの型・関数を書き換え、初期Stateを用意する。
 let answer = skipBeam(initial, beamWidth = 1000)
@@ -71,8 +73,9 @@ let answer = skipBeam(initial, beamWidth = 3000,
 type State = object                    # 盤面・巻き戻し履歴など
     score: CostType
     hash: HashType
+    isFinished: bool
 # Action・CostType・HashTypeも問題に合わせる。
-# evaluate/getHashは既定のフィールド参照、isFinishedは既定でfalse。
+# evaluate/getHashは既定のフィールド参照。isFinishedは遷移時に更新する。
 proc moveForward(s: var State, a: Action)
 proc moveBackward(s: var State, a: Action)
 proc expand(s: var State, frontier: var Frontier)
@@ -193,3 +196,41 @@ Action 8Bで簡略化前のセグ木373.90msに対しヒープ409.87ms、Action 
 幅4096・Action 8Bで378.00→368.50ms、Action 136Bで534.22→512.35msだった。
 幅64も含む4条件で約2.5〜4.1%短縮し、評価値・行動列・選抜件数は一致した。
 非2冪幅で末尾候補を改善・置換する場合と、最小化・最大化の両方も検証している。
+
+## Stateの完了フラグ
+
+編集用テンプレートは`State.isFinished: bool`を持つ。完了判定用の関数は不要。
+初期Stateにも正しい値を設定し、固定ターン探索ならfalseのままにする。
+通常beamは`expand`で遷移先の`next.isFinished`を設定してから登録する。
+差分更新型の`pushCandidate`は仮適用後の値を読むため、`moveForward`で更新し、
+`moveBackward`で以前の値を復元する。展開前のStateのフラグを使い回さない。
+
+```nim
+# moveForward内：遷移先の完了状態を保持する
+self.isFinished = goalCondition
+# moveBackward内では、変更前のisFinishedも復元する
+```
+
+`expand`内で評価値・キー・完了判定をまとめて計算する場合は、既存の`push`へ
+`finished = goalCondition`を直接渡してもよい（通常beamでは遷移後Stateも渡す）。
+初期状態の完了判定にはState側のフラグが必要。
+`State`には実在する`isFinished: bool`フィールドが必須。
+旧`proc/template isFinished(state): bool`形式は受け付けない。
+フラグが将来の動作を区別する情報なら、同一キーで異なる状態を混ぜないようにする。
+
+## 葉の評価値・Hash
+
+採用候補の生値を保持し、`expand`直前に`frontier.currentScore`・
+`frontier.currentHash`へ渡す。初期値は`evaluate(initial)`・`getHash(initial)`。
+`getHash`は直接`push`する実装でも必要となる。
+
+巡回だけを軽くする場合は`moveBoardForward`・`moveBoardBackward`で盤面・
+巻き戻し履歴・`isFinished`だけを更新し、`loadLeaf(state, leafScore, leafKey)`で
+評価値・Hashを復元する。この3つはセットで実装する。
+盤面フックを省略した場合は従来の`moveForward`・`moveBackward`を使う。
+`pushCandidate`の一時評価と最終Action列の再生には通常の遷移を使う。
+評価値がStateの保持値と異なる場合は`loadLeaf`で逆変換する。
+生値だけから復元できない成分は盤面フックでも更新する。
+
+巡回中の評価用フィールドは古い値なので、盤面フックから参照しない。
+`expand`は候補を作るたびに盤面・評価値・Hashを元へ戻す。

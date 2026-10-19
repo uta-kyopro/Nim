@@ -52,11 +52,14 @@
         ├── tree/
         │   └── kd_tree.nim                        # 最近傍・k近傍・半径・直方体検索を行うKD-tree
         ├── search/
-        │   ├── beam_search.nim                    # Stateをコピーする通常のビームサーチのテンプレート
-        │   ├── beam_search_core.nim               # 2層のNode配列・Hash重複排除・セグ木選抜
+        │   ├── regacy/                            # 通常beam・skipBeamの退避先
+        │   │   ├── beam_search.nim                    # Stateをコピーする通常のビームサーチのテンプレート
+        │   │   ├── beam_search_core.nim               # 2層のNode配列・Hash重複排除・セグ木選抜
+        │   │   ├── skip_beam.nim                      # 問題ごとの型・評価・遷移・展開を編集するテンプレート
+        │   │   └── skip_beam_core.nim                 # 差分更新・複数ターン遷移対応の探索エンジン
         │   ├── simulated_annealing.nim            # 時間制限・温度更新・巻き戻しを備えた焼きなましのテンプレート
-        │   ├── skip_beam.nim                      # 問題ごとの型・評価・遷移・展開を編集するテンプレート
-        │   ├── skip_beam_core.nim                 # 差分更新・複数ターン遷移対応の探索エンジン
+        │   ├── skip_tour_beam.nim                 # ツアー配列型・世代スキップ対応の編集用テンプレート
+        │   ├── skip_tour_beam_core.nim            # 待機経路を保持するオイラーツアー配列型探索エンジン
         │   ├── tour_beam.nim                      # 経路配列型・1ターン遷移専用の編集用テンプレート
         │   └── tour_beam_core.nim                 # 経路配列・葉の境界による差分更新探索エンジン
         └── utils/

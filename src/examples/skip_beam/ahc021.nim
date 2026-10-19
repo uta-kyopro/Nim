@@ -1,7 +1,7 @@
 # AHC021 A - Pyramid Sorting (元のskip_beam.nimの問題固有部分)
 # https://atcoder.jp/contests/ahc021/tasks/ahc021_a
 include ../../lib/header
-import ../../lib/search/skip_beam_core
+import ../../lib/search/regacy/skip_beam_core
 
 const
     N = 30
@@ -19,6 +19,7 @@ type
         len: int
         data: array[3000, T]
     State = object
+        isFinished: bool
         targetBall, potential: int
         hash: HashType
         b: array[N, array[N, int]]
@@ -95,6 +96,7 @@ proc initState(values: openArray[int]): State =
 
     let (ball, hash) = self.updateTargetBall(0, 0)
     self.targetBall = ball
+    self.isFinished = ball == M
 
     return self
 
@@ -122,6 +124,7 @@ proc moveForward(self:var State, action: Action) =
 
     (self.targetBall, self.hash) = self.updateTargetBall(
         self.targetBall, self.hash)
+    self.isFinished = self.targetBall == M
 
 # actionを実行する前の状態に遷移する
 # 今の状態は、親からactionを実行して遷移した状態である
@@ -140,8 +143,39 @@ proc moveBackward(self:var State, action: Action) =
 
     self.hash = self.hashHistory.pop()
     self.targetBall = self.targetBallHistory.pop()
+    self.isFinished = self.targetBall == M
 
-# 次の状態候補を全てselectorに追加する
+# 盤面と終了状態だけを適用し、評価値・Hashの更新を省く。
+proc moveBoardForward(self: var State, action: Action) =
+    self.targetBallHistory.add(self.targetBall)
+    var y1,x1,y2,x2,y3,x3: int
+    action.decode()
+    self.swapBalls(y1,x1,y2,x2)
+    if x3 < N: self.swapBalls(y1,x1,y3,x3)
+    var ball = self.targetBall
+    while ball < M:
+        let (y,x) = self.pos[ball]
+        if self.canMoveLeft(y,x) or self.canMoveRight(y,x): break
+        inc ball
+    self.targetBall = ball
+    self.isFinished = ball == M
+
+# 盤面と終了状態だけを巻き戻す。
+proc moveBoardBackward(self: var State, action: Action) =
+    var y1,x1,y2,x2,y3,x3: int
+    action.decode()
+    if x3 < N: self.swapBalls(y1,x1,y3,x3)
+    self.swapBalls(y1,x1,y2,x2)
+    self.targetBall = self.targetBallHistory.pop()
+    self.isFinished = self.targetBall == M
+
+# 保存済みの評価値・Hashを展開直前に復元する。
+template loadLeaf(self: var State, score: int, key: int) =
+    self.potential = score + targetCoefficient*self.targetBall
+    self.hash = key
+
+
+# 次の状態候補を全てselectorに追加する。
 proc expand(self:var State, parent: int, multiSelector:var Frontier) =
     proc push2(self:var State, parent: int, multiSelector:var Frontier, 
         y1, x1, y2, x2: int) =
@@ -196,7 +230,6 @@ proc expand(self:var State, parent: int, multiSelector:var Frontier) =
         self.push2(parent, multiSelector, y, x, y, x+1)
 
 
-proc isFinished(s: State): bool = s.targetBall == M
 proc getHash(s: State): HashType = s.hash
 
 defineSkipBeam(skipBeam, State, Action, CostType, HashType)

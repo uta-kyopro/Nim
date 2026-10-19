@@ -1,6 +1,8 @@
 # Beam Search
 
-[編集用テンプレート](../src/lib/search/beam_search.nim) / [探索エンジン](../src/lib/search/beam_search_core.nim) / [最小例](../src/examples/beam_search/basic.nim) / [AHC073例](../src/examples/beam_search/ahc073.nim)
+今後の改善対象は[tourBeam](tour_beam.md)・[skipTourBeam](skip_tour_beam.md)。本実装は`src/lib/search/regacy/`へ退避した。
+
+[編集用テンプレート](../src/lib/search/regacy/beam_search.nim) / [探索エンジン](../src/lib/search/regacy/beam_search_core.nim) / [最小例](../src/examples/beam_search/basic.nim) / [AHC073例](../src/examples/beam_search/ahc073.nim)
 
 [バケット化の例](../src/examples/beam_search/grouped.nim)
 
@@ -21,28 +23,30 @@ Skip Beamの最悪値による選抜方針を流用している。
 
 ## 利用方法
 
-テンプレートの`State`・`Action`・`evaluate`・`isFinished`・`expand`を書き換える。
+テンプレートの`State`・`Action`・`evaluate`・`expand`を書き換える。
+完了判定は`State.isFinished: bool`に保持する。
 `getHash`は既定で`State.hash`を返す。初期Hashを設定し、遷移時に差分更新する。
 必要なら`getHash`も書き換えられる。
 直接coreをimportし、型ごとに`defineBeamSearch`で関数を定義してもよい。
 
 ```nim
 include ../src/lib/header # 配置に合わせる
-import ../src/lib/search/beam_search_core # 配置に合わせる
+import ../src/lib/search/regacy/beam_search_core # 配置に合わせる
 
 type
     State = object
         value: int
+        isFinished: bool
     Frontier = BeamSearchFrontier[State, int, int, int]
 
 proc evaluate(s: State): int = abs(10-s.value)
 proc getHash(s: State): int = s.value
-proc isFinished(s: State): bool = s.value == 10
 proc expand(s: var State, frontier: var Frontier) =
     for action in [1,2]:
         if s.value+action > 10: continue
         var next = s
         next.value += action
+        next.isFinished = next.value == 10
         next.pushCandidate(frontier, action)
 
 defineBeamSearch(beamSearch, State, int, int, int)
@@ -109,7 +113,6 @@ let answer = beamSearch(initial, beamWidth = 100,
 O(G + M + Σ M_g log M_g)。各候補にStateを保持するため、大きなStateや候補数ではメモリ使用量に注意する。
 バケット化を無効にした追加前後のAHC073比較では、幅64（10入力×3回）は100.27→100.33ms、
 幅2816（3入力×3回）は1628.26→1647.24msで、約0.1%・1.2%の時間増だった。出力は全件一致した。
-
 ## 結果と計算量
 
 `BeamSearchResult`の`state`・`score`・`key`は返した候補の値、`turns`は処理した層数。
@@ -204,3 +207,26 @@ Actionだけを親のrefでつなぎ、選抜確定後だけ要素を生成す�
 10入力でのピークWorking Set平均は93.36→71.16MiBへ減少した。
 ref方式も公式再生100/100通過・全出力一致だったが、速度を優先し整数ID方式を維持した。
 ref方式の試作・測定結果はローカルの検証用ディレクトリに保存する。
+
+## Stateの完了フラグ
+
+編集用テンプレートは`State.isFinished: bool`を持つ。完了判定用の関数は不要。
+初期Stateにも正しい値を設定し、固定ターン探索ならfalseのままにする。
+通常beamは`expand`で遷移先の`next.isFinished`を設定してから登録する。
+差分更新型の`pushCandidate`は仮適用後の値を読むため、`moveForward`で更新し、
+`moveBackward`で以前の値を復元する。展開前のStateのフラグを使い回さない。
+
+```nim
+# 通常beamのexpand内
+var next = self
+# nextへ遷移を適用する
+next.isFinished = goalCondition
+next.pushCandidate(frontier, action)
+```
+
+`expand`内で評価値・キー・完了判定をまとめて計算する場合は、既存の`push`へ
+`finished = goalCondition`を直接渡してもよい（通常beamでは遷移後Stateも渡す）。
+初期状態の完了判定にはState側のフラグが必要。
+`State`には実在する`isFinished: bool`フィールドが必須。
+旧`proc/template isFinished(state): bool`形式は受け付けない。
+フラグが将来の動作を区別する情報なら、同一キーで異なる状態を混ぜないようにする。

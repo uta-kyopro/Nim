@@ -222,3 +222,24 @@ skipBeamの巡回時間のうち枝の削除は約0.0614秒、根の移動は約
 適用・巻き戻し回数の差は合計で約0.4%なので、探索順による状態遷移回数の差だけでは、
 実行時間の大きな差を説明できない。二重連鎖木の巡回・接続・祖先のactive更新が負担になっていると考えられる。
 AHC026では差が小さく、この倍率をskipBeamの一般的な遅さと捉えるものではない。
+
+## Stateの完了フラグ
+
+編集用テンプレートは`State.isFinished: bool`を持つ。完了判定用の関数は不要。
+初期Stateにも正しい値を設定し、固定ターン探索ならfalseのままにする。
+通常beamは`expand`で遷移先の`next.isFinished`を設定してから登録する。
+差分更新型の`pushCandidate`は仮適用後の値を読むため、`moveForward`で更新し、
+`moveBackward`で以前の値を復元する。展開前のStateのフラグを使い回さない。
+
+```nim
+# moveForward内：遷移先の完了状態を保持する
+self.isFinished = goalCondition
+# moveBackward内では、変更前のisFinishedも復元する
+```
+
+`expand`内で評価値・キー・完了判定をまとめて計算する場合は、既存の`push`へ
+`finished = goalCondition`を直接渡してもよい（通常beamでは遷移後Stateも渡す）。
+初期状態の完了判定にはState側のフラグが必要。
+`State`には実在する`isFinished: bool`フィールドが必須。
+旧`proc/template isFinished(state): bool`形式は受け付けない。
+フラグが将来の動作を区別する情報なら、同一キーで異なる状態を混ぜないようにする。

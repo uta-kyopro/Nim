@@ -1,8 +1,9 @@
 include ../../lib/header
-import ../../lib/search/beam_search_core
+import ../../lib/search/regacy/beam_search_core
 
 type
     State = object
+        isFinished: bool
         value: int
     Action = int
 
@@ -11,7 +12,6 @@ template evaluate(s: State): int = abs(13-s.value)
 # 同じ位置を同一状態として扱う。
 template getHash(s: State): int = s.value
 # 固定5ターンで最良を選ぶ。
-template isFinished(s: State): bool = false
 # 移動先の値を3グループに分けて候補を登録する。
 proc expand(s: var State,f: var BeamSearchFrontier[State,int,int,Action]) =
     for action in [1,2,3]:

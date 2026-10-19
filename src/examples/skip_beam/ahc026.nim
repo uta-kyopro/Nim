@@ -1,7 +1,7 @@
 # AHC026 A - Stack of Boxes
 # https://atcoder.jp/contests/ahc026/tasks/ahc026_a
 include ../../lib/header
-import ../../lib/search/skip_beam_core
+import ../../lib/search/regacy/skip_beam_core
 
 const
     MaxN = 200
@@ -23,6 +23,7 @@ type
         begin, target, cost: int
         key: uint64
     State = object
+        isFinished: bool
         boxes: array[MaxM, array[MaxN, int]] # 各山の下から順
         size: array[MaxM, int]
         minimum: array[MaxM, array[MaxN, int]]
@@ -249,7 +250,6 @@ proc evaluate(s: State): int =
         result += 4 * (s.size[column] - height)
 
 proc getHash(s: State): uint64 = s.key
-proc isFinished(s: State): bool = false
 
 proc moveForward(s: var State, action: Action) =
     s.frames.add(Frame(begin: s.operations.len, target: s.target, cost: s.cost, key: s.key))

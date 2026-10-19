@@ -1,4 +1,4 @@
-include ../header
+include ../../header
 
 ## Stateをコピーする層ごとのビームサーチ。探索木や巻き戻しは使わない。
 when not declared BeamSearchCoreModule:
@@ -34,6 +34,21 @@ when not declared BeamSearchCoreModule:
             buckets: seq[seq[BeamSearchNode[State, Score, Key, Action]]]
             when Action isnot NoBeamAction:
                 parentId: int
+
+    # Stateに実在するboolフィールドだけを読み、旧判定関数形式は受け付けない。
+    template simpleFinishedField(state: typed): bool =
+        const hasFinishedField = block:
+            var found = false
+            var probe: typeof(state)
+            for name, field in fieldPairs(probe):
+                when name == "isFinished":
+                    when field is bool: found = true
+            found
+        when not hasFinishedField:
+            {.error: "State must contain an isFinished: bool field".}
+        else:
+            state.isFinished
+
 
     # 評価方向に従い、aがbより良いか判定する。
     template simpleBetter[S](a, b: S, minimize: bool): bool =
@@ -160,9 +175,9 @@ when not declared BeamSearchCoreModule:
     # 遷移後のStateを評価し、採用の余地がある場合だけHashを計算して登録する。
     proc pushCandidate*[T, S, K, A](state: var T,
             f: var BeamSearchFrontier[T, S, K, A], action: A, group = -1): bool {.discardable.} =
-        mixin evaluate, getHash, isFinished
+        mixin evaluate, getHash
         let score = state.evaluate()
-        let finished = state.isFinished()
+        let finished = simpleFinishedField(state)
         if not f.canImprove(score, finished, group): return false
         f.push(state, score, state.getHash(), finished, action, group)
 
@@ -195,7 +210,7 @@ when not declared BeamSearchCoreModule:
     proc runBeamSearchImpl[State, Score, Key, Action](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
             groupCount = 0): BeamSearchResult[State, Score, Key, Action] =
-        mixin evaluate, getHash, isFinished, expand
+        mixin evaluate, getHash, expand
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
         when Action isnot NoBeamAction:
@@ -229,7 +244,7 @@ when not declared BeamSearchCoreModule:
         current[0].score = current[0].state.evaluate()
         current[0].key = current[0].state.getHash()
         result.status = beamMaxTurns
-        if current[0].state.isFinished():
+        if simpleFinishedField(current[0].state):
             result.status = beamFinished
             storeBest(current)
             return

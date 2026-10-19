@@ -10,6 +10,7 @@ when not declared BeamSearchModule:
         Action* = object # TODO: 1回の遷移を再現する操作・選択を格納する。
         State* = object # TODO: 盤面など、各候補が所有する状態（履歴は不要）。
             hash*: HashType # TODO: 初期化し、遷移時にZobristHashを差分更新する。
+            isFinished*: bool # TODO: 完了時にtrue。固定ターン探索はfalseのままでよい。
         Node* = BeamSearchNode[State, CostType, HashType, Action]
         Frontier* = BeamSearchFrontier[State, CostType, HashType, Action]
 
@@ -21,16 +22,10 @@ when not declared BeamSearchModule:
     template getHash*(self: State): HashType =
         self.hash
 
-    # TODO: 完了条件を返す（固定ターンで最良を選ぶ問題なら常にfalse）。
-    template isFinished*(self: State): bool =
-        block:
-            discard self
-            false
-
     # TODO: 合法な遷移ごとにStateをコピー・更新し、next.pushCandidate(frontier, action)で登録する。
     proc expand*(self: var State, frontier: var Frontier) =
         # var next = self
-        # nextに遷移を適用し、next.hashも差分更新する。moveBackwardやparentは不要。
+        # nextに遷移を適用し、next.hashとnext.isFinishedを更新する。
         # next.pushCandidate(frontier, action)
         # バケット化を使う場合は next.pushCandidate(frontier, action, group = groupId)
         raise newException(ValueError, "implement expand")

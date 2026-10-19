@@ -5,13 +5,12 @@ type
     Action = int
     State = object
         position, target: int
+        isFinished: bool # 固定5ターンの全候補を比較するためfalseのままにする。
 
 # 目標位置までの残り距離を最小化する。
 template evaluate(s: State): int = s.target-s.position
 # 同じ位置を同一状態として扱う。
 template getHash(s: State): int = s.position
-# 固定5ターンの全候補を比較するため、途中完了では止めない。
-template isFinished(s: State): bool = false
 # TODO: 実問題ではActionを適用し、評価値やHashも差分更新する。
 proc moveForward(s: var State, action: Action) = s.position += action
 # TODO: 実問題では対応する適用を完全に取り消す。

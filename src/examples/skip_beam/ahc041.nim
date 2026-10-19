@@ -1,7 +1,7 @@
 # AHC041 A - Christmas Tree Cutting
 # https://atcoder.jp/contests/ahc041/tasks/ahc041_a
 include ../../lib/header
-import ../../lib/search/skip_beam_core
+import ../../lib/search/regacy/skip_beam_core
 
 const
     MaxN = 1000
@@ -12,6 +12,7 @@ const
 type
     Action = int # 今回追加する頂点の親。-1なら根。
     State = object
+        isFinished: bool
         turn, score: int
         depth: array[MaxN, int]
         key: uint64
@@ -60,7 +61,6 @@ proc initState(): State =
 
 proc evaluate(s: State): int = s.score
 proc getHash(s: State): uint64 = s.key
-proc isFinished(s: State): bool = false # 全候補を比較する固定ターン型。
 
 proc moveForward(s: var State, action: Action) =
     let v = order[s.turn]
@@ -77,6 +77,25 @@ proc moveBackward(s: var State, action: Action) =
     s.key = s.key xor depthHash[v][d]
     s.score -= d * beauty[v]
     s.depth[v] = -1
+
+# 盤面と終了状態だけを適用し、評価値・Hashの更新を省く。
+proc moveBoardForward(s: var State, action: Action) =
+    let v = order[s.turn]
+    let d = if action < 0: 0 else: s.depth[action] + 1
+    s.depth[v] = d
+    inc s.turn
+
+# 盤面と終了状態だけを巻き戻す。
+proc moveBoardBackward(s: var State, action: Action) =
+    dec s.turn
+    let v = order[s.turn]
+    s.depth[v] = -1
+
+# 保存済みの評価値・Hashを展開直前に復元する。
+template loadLeaf(s: var State, leafScore: int, leafKey: uint64) =
+    s.score = leafScore
+    s.key = leafKey
+
 
 proc pushCandidate(s: var State, parent: int, frontier: var Frontier, action: Action) =
     s.moveForward(action)

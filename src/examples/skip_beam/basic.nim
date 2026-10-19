@@ -1,5 +1,5 @@
 include ../../lib/header
-import ../../lib/search/skip_beam_core
+import ../../lib/search/regacy/skip_beam_core
 
 # skip_beam.nim の「問題ごとに編集」を埋めた例。
 
@@ -8,16 +8,32 @@ type
     Action = int
     State = object
         position, target, score: int
+        isFinished: bool
 
 template evaluate(s: State): int = s.score
 proc getHash(s: State): int = s.position
-proc isFinished(s: State): bool = s.position == s.target
 proc moveForward(s: var State, action: Action) =
     s.position += action
     s.score -= action
+    s.isFinished = s.position == s.target
 proc moveBackward(s: var State, action: Action) =
     s.position -= action
     s.score += action
+    s.isFinished = s.position == s.target
+
+# 巡回中は位置と終了状態だけを更新する。
+proc moveBoardForward(s: var State, action: Action) =
+    s.position += action
+    s.isFinished = s.position == s.target
+
+# 巡回中は位置と終了状態だけを巻き戻す。
+proc moveBoardBackward(s: var State, action: Action) =
+    s.position -= action
+    s.isFinished = s.position == s.target
+
+# 展開直前に葉の評価値を復元する（Hashは位置から直接求まる）。
+template loadLeaf(s: var State, leafScore: int, leafKey: int) =
+    s.score = leafScore
 
 proc expand(s: var State, frontier: var BeamFrontier[Action, int, int]) =
     for action in [1, 2]:
@@ -35,5 +51,5 @@ when isMainModule:
     echo answer.status       # beamFinished
     var replay = initial
     for action in answer.actions: replay.moveForward(action)
-    doAssert replay.isFinished()
+    doAssert replay.isFinished
     doAssert replay.evaluate() == answer.score

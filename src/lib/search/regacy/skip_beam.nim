@@ -15,6 +15,7 @@ when not declared SkipBeamModule:
         State* = object     # TODO: 盤面・評価差分・巻き戻し履歴などを追加
             score*: CostType # TODO: 初期化し、適用時に差分更新・巻き戻し時に復元する。
             hash*: HashType # TODO: 初期化し、適用時に差分更新・巻き戻し時に復元する。
+            isFinished*: bool # TODO: 完了時にtrue。固定ターン探索はfalseのままでよい。
 
     type Frontier* = BeamFrontier[Action, CostType, HashType]
 
@@ -29,19 +30,26 @@ when not declared SkipBeamModule:
     template getHash*(self: State): HashType =
         self.hash
 
-    # TODO: 完了条件を返す（固定ターンで最良を選ぶ問題なら常にfalse）。
-    template isFinished*(self: State): bool =
-        block:
-            discard self
-            false
-
-    # TODO: actionを適用して評価値・Hashも差分更新し、巻き戻しに必要な変更前の値を保存する。
+    # TODO: isFinishedも更新し、actionを適用して評価値・Hashも差分更新し、巻き戻しに必要な変更前の値を保存する。
     proc moveForward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveForward")
 
-    # TODO: 対応するmoveForwardの変更を取り消し、評価値・Hashと履歴も直前のStateへ完全に戻す。
+    # TODO: isFinishedも復元し、対応するmoveForwardの変更を取り消し、評価値・Hashと履歴も直前のStateへ完全に戻す。
     proc moveBackward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveBackward")
+
+    # TODO: 巡回時に必要な盤面・履歴・isFinishedだけを更新する。
+    proc moveBoardForward*(self: var State, action: Action) =
+        self.moveForward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+
+    # TODO: moveBoardForwardの盤面・履歴・isFinishedを元に戻す。
+    proc moveBoardBackward*(self: var State, action: Action) =
+        self.moveBackward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+
+    # TODO: 保存値から評価用のStateを復元する。評価式が異なる場合は逆変換する。
+    template loadLeaf*(self: var State, leafScore: CostType, leafKey: HashType) =
+        self.score = leafScore
+        self.hash = leafKey
 
     # -------------------------------------------------------------------
     # 問題ごとに編集：候補列挙

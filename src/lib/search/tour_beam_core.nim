@@ -1,7 +1,7 @@
 include ../header
 import std/typetraits
 
-## rhoo版を参考に、経路配列と葉の境界で巡回する1ターン遷移専用ビームサーチ。
+## 経路配列と葉の境界で巡回する1ターン遷移専用ビームサーチ。
 ## Stateは1つだけ保持し、候補ごとのコピーや親・兄弟リンクは使わない。
 when not declared TourBeamCoreModule:
     const TourBeamCoreModule* = true
@@ -43,6 +43,20 @@ when not declared TourBeamCoreModule:
             trace, tour, nextTour: seq[Action]
             leaves, nextLeaves: seq[int]
             visitOrder, offsets, expandedLeaves: seq[int]
+
+    # Stateに実在するboolフィールドだけを読み、旧判定関数形式は受け付けない。
+    template tourFinishedField(state: typed): bool =
+        const hasFinishedField = block:
+            var found = false
+            var probe: typeof(state)
+            for name, field in fieldPairs(probe):
+                when name == "isFinished":
+                    when field is bool: found = true
+            found
+        when not hasFinishedField:
+            {.error: "State must contain an isFinished: bool field".}
+        else:
+            state.isFinished
 
     # ビーム幅に応じた容量の重複除去用Hash表を確保する。
     proc initTourHashMap[K](width: int): TourHashMap[K] =
@@ -224,11 +238,11 @@ when not declared TourBeamCoreModule:
     # Actionを仮適用して評価・必要時のHash取得・巻き戻しを行い、候補を登録する。
     proc pushCandidate*[T, A, S, K](self: var T, frontier: var TourBeamFrontier[A, S, K],
             action: A, group = -1): bool {.discardable.} =
-        mixin moveForward, moveBackward, evaluate, isFinished, getHash
+        mixin moveForward, moveBackward, evaluate, getHash
         if frontier.remaining <= 0: return false
         self.moveForward(action)
         let score = self.evaluate()
-        let finished = self.isFinished()
+        let finished = tourFinishedField(self)
         if not frontier.canImprove(score, finished, group):
             self.moveBackward(action)
             return false
@@ -321,7 +335,7 @@ when not declared TourBeamCoreModule:
     proc runTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
             groupCount = 0): TourBeamResult[Action, Score] =
-        mixin evaluate, isFinished, expand
+        mixin evaluate, expand
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
         var frontier = initTourBeamFrontier[Action, Score, Key](beamWidth, minimize, groupLimit, groupCount)
@@ -329,7 +343,7 @@ when not declared TourBeamCoreModule:
         var current: seq[TourCandidate[Action, Score, Key]]
         result.score = tree.state.evaluate()
         result.status = beamMaxTurns
-        if tree.state.isFinished():
+        if tourFinishedField(tree.state):
             result.status = beamFinished
             return
         for turn in 1..maxTurns:

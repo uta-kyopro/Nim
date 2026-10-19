@@ -21,6 +21,7 @@ type
         ids: array[3, int]
         count: int
     State = object
+        isFinished: bool
         circles: Circles
         turn, cost: int
     Shape = object
@@ -238,7 +239,6 @@ proc evaluate(s: State): int =
         savingsDepth = s.turn
     CostWeight*s.cost - estimatedSaving(s.circles, savings, predictionCount)
 
-proc isFinished(s: State): bool = false # 最終層も全候補の評価を比較する。
 
 proc getHash(s: State): uint64 =
     # 同じ層の位置は共通。未確定を含む魔法陣の多重集合を45bitに詰める。

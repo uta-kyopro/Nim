@@ -1,19 +1,20 @@
 include ../../lib/header
-import ../../lib/search/beam_search_core
+import ../../lib/search/regacy/beam_search_core
 
 type
     State = object
         position: int
+        isFinished: bool
     Frontier = BeamSearchFrontier[State, int, int, int]
 
 proc evaluate(s: State): int = abs(10-s.position)
 proc getHash(s: State): int = s.position
-proc isFinished(s: State): bool = s.position == 10
 proc expand(s: var State, frontier: var Frontier) =
     for action in [1,2]:
         if s.position+action > 10: continue
         var next = s
         next.position += action
+        next.isFinished = next.position == 10
         next.pushCandidate(frontier, action)
 
 defineBeamSearch(beamSearch, State, int, int, int)
