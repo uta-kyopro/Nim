@@ -77,7 +77,7 @@ when not declared SkipTourBeamCoreModule:
             trace: seq[Action]
             events, nextEvents, filtered: seq[int]
             needed, direct: seq[bool]
-            stack, remap, order, offsets: seq[int]
+            stack, remap, head, next: seq[int]
             saved: int
             confirmedPrefix: int # Stateと履歴IDの一致を確認済みの確定接頭辞長。
             actionCount, eventCount: int
@@ -374,17 +374,28 @@ when not declared SkipTourBeamCoreModule:
             skipTourBoardForward(tree.state, tree.trace[i])
         commonDepth = depth
 
+    # 親ごとの候補リストを逆順の先頭追加で作り、スロット昇順を保つ。
+    proc skipTourGroupChildren[T, A, S, K](tree: var SkipTourTree[T, A],
+            chosen: seq[SkipTourCandidate[A, S, K]]) =
+        if tree.head.len < tree.actions.len+1: tree.head.setLen(tree.actions.len+1)
+        tree.next.setLen(chosen.len)
+        for slot in countdown(chosen.high, 0):
+            let parent = chosen[slot].parent+1
+            tree.next[slot] = tree.head[parent]
+            tree.head[parent] = slot+1
+
     # 同じ親から選ばれた子を展開し、最後の子のStateをそのまま保持する。
     proc skipTourChildren[T, A, S, K](tree: var SkipTourTree[T, A],
             chosen: seq[SkipTourCandidate[A, S, K]], best, parent: int,
             frontier: var SkipTourBeamFrontier[A, S, K], firstMove: var bool,
             commonDepth, newSaved, remaining: var int) =
         mixin expand
-        let begin = if parent < 0: 0 else: tree.offsets[parent]
-        let ending = tree.offsets[parent+1]
-        for position in begin..<ending:
+        var link = tree.head[parent+1]
+        tree.head[parent+1] = 0
+        while link != 0:
+            let slot = link-1
+            link = tree.next[slot]
             tree.skipTourMoveParent(firstMove, commonDepth)
-            let slot = tree.order[position]
             let action = chosen[slot].action
             let node = tree.actionCount
             tree.nextActions[node] = action
@@ -442,22 +453,15 @@ when not declared SkipTourBeamCoreModule:
             chosen: seq[SkipTourCandidate[A, S, K]], best: int,
             frontier: var SkipTourBeamFrontier[A, S, K]) =
         tree.remap.setLen(tree.actions.len)
-        tree.offsets.setLen(tree.actions.len+2)
-        for count in tree.offsets.mitems: count = 0
-        for candidate in chosen: inc tree.offsets[candidate.parent+2]
-        for i in 1..<tree.offsets.len: tree.offsets[i] += tree.offsets[i-1]
-        tree.order.setLen(chosen.len)
-        for i, candidate in chosen:
-            tree.order[tree.offsets[candidate.parent+1]] = i
-            inc tree.offsets[candidate.parent+1]
+        tree.skipTourGroupChildren(chosen)
         var first = 0
         var last = tree.events.len
         let oldPrefix = tree.prefix.len
         # 既に全枝に共通する接頭辞は、採用親に到達する直前まで確定できる。
-        if tree.offsets[0] == 0:
+        if tree.head[0] == 0:
             while first < last and tree.events[first] == -tree.events[last-1]:
                 let node = tree.events[first]-1
-                if tree.offsets[node] != tree.offsets[node+1]: break
+                if tree.head[node+1] != 0: break
                 tree.remap[node] = -tree.prefix.len-2
                 tree.prefix.add(tree.actions[node])
                 inc first
@@ -501,11 +505,11 @@ when not declared SkipTourBeamCoreModule:
                 tree.stack.add(event-1)
             else:
                 let old = -event-1
-                if tree.offsets[old] != tree.offsets[old+1]: expandParent(old)
+                if tree.head[old+1] != 0: expandParent(old)
                 tree.stack.setLen(tree.stack.len-1)
                 commonKept = min(commonKept, tree.stack.len)
                 commonDepth = min(commonDepth, tree.prefix.len+tree.stack.len)
-        if tree.offsets[0] != 0: expandParent(-1)
+        if tree.head[0] != 0: expandParent(-1)
         for i in countdown(tree.filtered.high, 0):
             tree.nextEvents[tree.eventCount] = -tree.filtered[i]-1
             inc tree.eventCount
@@ -563,14 +567,7 @@ when not declared SkipTourBeamCoreModule:
             rootNeeded = tree.direct[node]
             inc first
             dec last
-        tree.offsets.setLen(tree.actions.len+2)
-        for x in tree.offsets.mitems: x = 0
-        for c in chosen: inc tree.offsets[c.parent+2]
-        for i in 1..<tree.offsets.len: tree.offsets[i] += tree.offsets[i-1]
-        tree.order.setLen(chosen.len)
-        for i, c in chosen:
-            tree.order[tree.offsets[c.parent+1]] = i
-            inc tree.offsets[c.parent+1]
+        tree.skipTourGroupChildren(chosen)
         tree.nextActions.setLen(0)
         tree.nextEvents.setLen(0)
         # 保持するActionの連続区間をまとめて詰め、旧番号の変換表を作る。
@@ -609,7 +606,7 @@ when not declared SkipTourBeamCoreModule:
                 tree.stack.add(old)
             else:
                 let old = -event-1
-                if tree.offsets[old] != tree.offsets[old+1]:
+                if tree.head[old+1] != 0:
                     tree.skipTourChildren(chosen, best, old, frontier, firstMove, commonDepth, newSaved, remaining)
                 tree.stack.setLen(tree.stack.len-1)
                 commonDepth = min(commonDepth, tree.prefix.len+tree.stack.len)
@@ -618,10 +615,10 @@ when not declared SkipTourBeamCoreModule:
         # 根の候補は末尾に置き、先頭での不要な根への復帰を避ける。
         for pos in countdown(first-1, 0):
             let old = tree.filtered[pos]-1
-            if tree.offsets[old] != tree.offsets[old+1]:
+            if tree.head[old+1] != 0:
                 tree.skipTourChildren(chosen, best, old, frontier,
                     firstMove, commonDepth, newSaved, remaining)
-        if tree.offsets[0] != 0:
+        if tree.head[0] != 0:
             tree.skipTourChildren(chosen, best, -1, frontier, firstMove, commonDepth, newSaved, remaining)
         when defined(debug): doAssert remaining == 0
         if chosen.len == 0:

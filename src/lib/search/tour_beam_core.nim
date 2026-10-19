@@ -333,8 +333,10 @@ when not declared TourBeamCoreModule:
         tree.tourOrder(candidates)
         let depth = tree.trace.len
         tree.trace.add(candidates[tree.visitOrder[^1]].action)
-        tree.nextTour.setLen(0)
-        tree.nextLeaves.setLen(0)
+        tree.nextTour.setLen(tree.tour.len+candidates.len)
+        tree.nextLeaves.setLen(candidates.len)
+        var appended = 0
+        var nextLeaf = 0
         tree.expandedLeaves.setLen(candidates.len)
         var previous = tree.leaves.high
         var applied = 0
@@ -347,9 +349,8 @@ when not declared TourBeamCoreModule:
             for i in countdown(depth+applied-1, depth-common):
                 tourBoardBackward(tree.state, tree.trace[i])
             applied = 1
-            let appended = tree.nextTour.len
-            tree.nextTour.setLen(appended+common+1)
             tree.nextTour.tourCopyRange(appended, tree.trace, depth-common, common+1)
+            appended += common+1
             var progress = 0
             for j in parent..<previous:
                 let rank = tree.leaves[j+1]-tree.leaves[j]
@@ -358,14 +359,16 @@ when not declared TourBeamCoreModule:
                     progress = rank
             tree.trace[depth] = candidates[slot].action
             for i in depth-common..depth: tourBoardForward(tree.state, tree.trace[i])
-            frontier.currentParent = tree.nextLeaves.len
-            tree.expandedLeaves[slot] = tree.nextLeaves.len
+            frontier.currentParent = nextLeaf
+            tree.expandedLeaves[slot] = nextLeaf
             frontier.currentScore = candidates[slot].score
             frontier.currentHash = candidates[slot].key
             tourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
             tree.state.expand(frontier)
-            tree.nextLeaves.add(tree.nextTour.len)
+            tree.nextLeaves[nextLeaf] = appended
+            inc nextLeaf
             previous = parent
+        tree.nextTour.setLen(appended)
         swap(tree.tour, tree.nextTour)
         swap(tree.leaves, tree.nextLeaves)
 
