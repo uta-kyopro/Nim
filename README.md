@@ -54,8 +54,9 @@
         ├── search/
         │   ├── beam_search.nim                    # Stateをコピーする通常のビームサーチのテンプレート
         │   ├── beam_search_core.nim               # 2層のNode配列・Hash重複排除・セグ木選抜
-        │   ├── thunder_beam.nim                   # 問題ごとの型・評価・遷移・展開を編集するテンプレート
-        │   └── thunder_beam_core.nim              # 差分更新・複数ターン遷移対応の探索エンジン
+        │   ├── simulated_annealing.nim            # 時間制限・温度更新・巻き戻しを備えた焼きなましのテンプレート
+        │   ├── skip_beam.nim                      # 問題ごとの型・評価・遷移・展開を編集するテンプレート
+        │   └── skip_beam_core.nim                 # 差分更新・複数ターン遷移対応の探索エンジン
         └── utils/
             └── timer.nim                          # 単調時計による経過時間・期限判定Timer
 ```

@@ -1,7 +1,7 @@
 # AHC026 A - Stack of Boxes
 # https://atcoder.jp/contests/ahc026/tasks/ahc026_a
 include ../../lib/header
-import ../../lib/search/thunder_beam_core
+import ../../lib/search/skip_beam_core
 
 const
     MaxN = 200
@@ -300,7 +300,7 @@ proc expand(s: var State, parent: int, frontier: var Frontier) =
                 frontier.push(action, s.evaluate(), s.getHash(), parent)
             s.moveBackward(action)
 
-defineThunderBeam(beamSearch, State, Action, int, uint64)
+defineSkipBeam(skipBeam, State, Action, int, uint64)
 
 proc finish(s: var State) =
     s.drain()
@@ -320,7 +320,7 @@ proc solve(initial: State, beamWidth = Ahc026BeamWidth,
     var fallback = start
     fallback.finish()
     fallback.remember()
-    let answer = beamSearch(start, beamWidth, maxTurns = n,
+    let answer = skipBeam(start, beamWidth, maxTurns = n,
         timeLimitSec = timeLimitSec, minBeamWidth = minBeamWidth,
         widthUpdateInterval = 1, stopOnTimeLimit = false)
     var replay = start

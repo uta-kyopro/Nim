@@ -2,8 +2,8 @@ include ../header
 
 ## 差分更新・巻き戻しによるビームサーチ。標準選抜 O(log W)、幅Wは実行時指定。
 ## 状態を候補ごとにコピーせず、共通経路を探索木で共有する。stepによる複数ターン遷移に対応。
-when not declared ThunderBeamCoreModule:
-    const ThunderBeamCoreModule* = true
+when not declared SkipBeamCoreModule:
+    const SkipBeamCoreModule* = true
 
     type
         BeamStatus* = enum
@@ -41,6 +41,7 @@ when not declared ThunderBeamCoreModule:
         BeamFrontier*[Action, Score, Key] = object
             selectors: Deque[BeamSelector[Action, Score, Key]]
             width, stepMax, remaining: int
+            currentParent: int
             minimize: bool
             groupLimit, groupCount: int
         BeamNode[Action] = object
@@ -112,25 +113,24 @@ when not declared ThunderBeamCoreModule:
             let isMinimum = minimize
             if isMinimum: first < second else: second < first
 
-    # 無効な葉を除き、2候補のうち評価の悪いインデックスを返す。
+    # 有効な2候補のうち評価の悪いindexを返す（同点は左を優先）。
     template beamWorst[A, S, K](s: BeamSelector[A, S, K], a, b: int): int =
         block:
             let selector = s
             let first = a
             let second = b
-            if first < 0: second
-            elif second < 0: first
-            elif beamBetter(selector.candidates[first].score, selector.candidates[second].score,
+            if beamBetter(selector.candidates[first].score, selector.candidates[second].score,
                 selector.minimize): second
             else: first
 
-    # 候補が幅に達した時点で、最悪候補を管理するセグ木を構築する。
+    # 幅到達時に一括構築し、余った葉は末尾候補を参照させて無効値チェックを省く。
     proc beamBuild[A, S, K](s: BeamSelector[A, S, K]) =
         s.size = 1
         while s.size < s.width: s.size *= 2
         s.worst.setLen(s.size * 2)
-        for i in 0..<s.worst.len: s.worst[i] = -1
         for i in 0..<s.width: s.worst[s.size+i] = i
+        # 末尾候補だけの部分木は、候補の評価値が変わっても保持するindexが変わらない。
+        for i in s.width..<s.size: s.worst[s.size+i] = s.width-1
         for i in countdown(s.size-1, 1):
             let left = i shl 1
             s.worst[i] = s.beamWorst(s.worst[left], s.worst[left or 1])
@@ -145,7 +145,7 @@ when not declared ThunderBeamCoreModule:
 
     # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
     proc beamPush[A, S, K](s: BeamSelector[A, S, K],
-        candidate: BeamCandidate[A, S, K], finished: bool, group: int): bool =
+        candidate: BeamCandidate[A, S, K], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
         if finished:
             if not s.hasFinished:
                 s.hasFinished = true
@@ -156,8 +156,9 @@ when not declared ThunderBeamCoreModule:
             s.buckets[group].add(candidate)
             return true
         let full = s.candidates.len == s.width
-        if full and not beamBetter(candidate.score,
-            s.candidates[s.worst[1]].score, s.minimize): return false
+        when not scoreChecked:
+            if full and not beamBetter(candidate.score,
+                s.candidates[s.worst[1]].score, s.minimize): return false
         if s.indices.used >= s.indices.keys.len * 7 div 10: s.beamRebuildHash()
         let (found, slot) = s.indices.getIndex(candidate.key)
         let old = if found: s.indices.values[slot] else: -1
@@ -217,9 +218,9 @@ when not declared ThunderBeamCoreModule:
         beamBetter(score, s.candidates[s.worst[1]].score, s.minimize)
 
     # 評価済みの遷移を指定step先へ登録し、親の保持に必要な最大stepを記録する。
-    proc push*[A, S, K](frontier: var BeamFrontier[A, S, K], action: A,
-        score: S, key: K, parent: int, finished = false, step = 1,
-        group = -1): bool {.discardable.} =
+    proc beamRegister[A, S, K](frontier: var BeamFrontier[A, S, K], action: A,
+        score: S, key: K, parent: int, finished: bool, step, group: int,
+        scoreChecked: static[bool]): bool =
         ## score/key/finishedは遷移後の値。stepは正のターン消費量。
         when defined(debug):
             if step <= 0: raise newException(ValueError, "beam step must be positive")
@@ -236,8 +237,39 @@ when not declared ThunderBeamCoreModule:
                 groupLimit: frontier.groupLimit,
                 buckets: newSeq[seq[BeamCandidate[A, S, K]]](frontier.groupCount)))
         result = frontier.selectors[step-1].beamPush(
-            BeamCandidate[A, S, K](action: action, score: score, key: key, parent: parent), finished, group)
+            BeamCandidate[A, S, K](action: action, score: score, key: key, parent: parent), finished, group, scoreChecked)
         if result: frontier.stepMax = max(frontier.stepMax, step)
+
+    # 評価済み候補を安全に登録し、直接呼び出しでも足切りと引数検証を行う。
+    proc push*[A, S, K](frontier: var BeamFrontier[A, S, K], action: A,
+        score: S, key: K, parent: int, finished = false, step = 1,
+        group = -1): bool {.discardable.} =
+        frontier.beamRegister(action, score, key, parent, finished, step, group, false)
+
+    # 仮適用・評価・事前足切り・必要時のHash取得・巻き戻し後、足切りを重複せず登録する。
+    proc pushCandidate*[T, A, S, K](self: var T, frontier: var BeamFrontier[A, S, K],
+        parent: int, action: A, step = 1, group = -1): bool {.discardable.} =
+        mixin moveForward, evaluate, isFinished, getHash, moveBackward
+        if step > frontier.remainingTurns(): return false
+        self.moveForward(action)
+        let score = self.evaluate()
+        let finished = self.isFinished()
+        if not frontier.canImprove(score, step, finished, group):
+            self.moveBackward(action)
+            return false
+        let key = self.getHash()
+        self.moveBackward(action)
+        frontier.beamRegister(action, score, key, parent, finished, step, group, true)
+
+    # 展開中の親ノードを自動で使い、行動だけを指定して候補を登録する。
+    proc beamPushCurrent[T, A, S, K](self: var T, frontier: var BeamFrontier[A, S, K],
+        action: A, step = 1, group = -1): bool {.discardable.} =
+        pushCandidate(self, frontier, frontier.currentParent, action, step, group)
+
+    # 省略形の追加条件は名前付きで渡す。既存の整数Actionの位置引数を優先する。
+    template pushCandidate*[T, A, S, K](self: var T, frontier: var BeamFrontier[A, S, K],
+        action: A, step: untyped = 1, group: untyped = -1): bool =
+        beamPushCurrent(self, frontier, action, step, group)
 
     # 空きインデックスを再利用し、なければプールを拡張してノードを確保する。
     proc beamAllocate[T, A](tree: var BeamTree[T, A], node: BeamNode[A]): int =
@@ -338,7 +370,11 @@ when not declared ThunderBeamCoreModule:
         while true:
             v = tree.beamMoveToLeaf(v)
             frontier.stepMax = 1
-            tree.state.expand(v, frontier)
+            frontier.currentParent = v
+            when compiles(tree.state.expand(frontier)):
+                tree.state.expand(frontier)
+            else:
+                tree.state.expand(v, frontier)
             tree.nodes[v].retainedUntil = tree.turn + frontier.stepMax - 1
             while tree.removals.len < frontier.stepMax: tree.removals.addLast(@[])
             tree.removals[frontier.stepMax-1].add(v)
@@ -377,7 +413,7 @@ when not declared ThunderBeamCoreModule:
             limitSeconds > 0 and float(getMonoTime().ticks - startedAt.ticks) / 1e9 >= limitSeconds
 
     # 差分適用・巻き戻しで展開と選抜を繰り返し、最良の行動列と終了状態を返す。
-    proc runThunderBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
+    proc runSkipBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
         maxTurns = 2000, minimize = true, timeLimitSec = 0.0,
         minBeamWidth = 0, widthUpdateInterval = 256,
         stopOnTimeLimit = true, groupLimit = 0, groupCount = 0): BeamResult[Action, Score] =
@@ -396,7 +432,7 @@ when not declared ThunderBeamCoreModule:
                 raise newException(ValueError, "group selection requires fixed width")
             if groupLimit < 0 or groupCount < 0 or (groupLimit > 0 and groupCount <= 0):
                 raise newException(ValueError, "invalid group bucket dimensions")
-        let start = getMonoTime()
+        let start = if timeLimitSec > 0: getMonoTime() else: default(MonoTime)
         var tree = BeamTree[State, Action](state: initial,
             nodes: ObjectPool[BeamNode[Action]](
                 data: newSeqOfCap[BeamNode[Action]](beamWidth * 4),
@@ -428,18 +464,18 @@ when not declared ThunderBeamCoreModule:
             let selector = frontier.selectors.popFirst()
             selector.beamSelectGroups()
             result.selectedCandidates += int64(selector.candidates.len + ord(selector.hasFinished))
-            totalWidth += float((frontier.width + selector.candidates.len) shr 1)
+            if minBeamWidth > 0:
+                totalWidth += float((frontier.width + selector.candidates.len) shr 1)
             var bestIndex = -1
             if selector.hasFinished or selector.candidates.len > 0:
                 var candidate: BeamCandidate[Action, Score, Key]
                 if selector.hasFinished: candidate = selector.finished
                 else:
-                    candidate = selector.candidates[0]
                     bestIndex = 0
-                    for i, c in selector.candidates:
-                        if beamBetter(c.score, candidate.score, minimize):
-                            candidate = c
+                    for i in 1..<selector.candidates.len:
+                        if beamBetter(selector.candidates[i].score, selector.candidates[bestIndex].score, minimize):
                             bestIndex = i
+                    candidate = selector.candidates[bestIndex]
                 result.score = candidate.score
                 result.turns = turn
                 if selector.hasFinished or turn == maxTurns:
@@ -474,13 +510,13 @@ when not declared ThunderBeamCoreModule:
         result.actions = tree.beamPath(tree.saved)
 
     # State・Action・評価値・キーの型を固定し、指定名の探索関数を定義する。
-    template defineThunderBeam*(name, State, Action, Score, Key: untyped) =
+    template defineSkipBeam*(name, State, Action, Score, Key: untyped) =
         ## 問題ごとに一度定義すると name(initial, beamWidth, ...) で呼べる。
-        # 型を固定した探索条件をrunThunderBeamへ渡す。
+        # 型を固定した探索条件をrunSkipBeamへ渡す。
         template name(initial: State, beamWidth: int, maxTurns = 2000,
             minimize = true, timeLimitSec = 0.0,
             minBeamWidth = 0, widthUpdateInterval = 256,
             stopOnTimeLimit = true, groupLimit = 0, groupCount = 0): BeamResult[Action, Score] =
-            runThunderBeam[State, Action, Score, Key](initial, beamWidth, maxTurns,
+            runSkipBeam[State, Action, Score, Key](initial, beamWidth, maxTurns,
                 minimize, timeLimitSec, minBeamWidth, widthUpdateInterval, stopOnTimeLimit,
                 groupLimit, groupCount)

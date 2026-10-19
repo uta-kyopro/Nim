@@ -1,7 +1,7 @@
 # AHC041 A - Christmas Tree Cutting
 # https://atcoder.jp/contests/ahc041/tasks/ahc041_a
 include ../../lib/header
-import ../../lib/search/thunder_beam_core
+import ../../lib/search/skip_beam_core
 
 const
     MaxN = 1000
@@ -97,12 +97,12 @@ proc expand(s: var State, parent: int, frontier: var Frontier) =
         usedDepth[d + 1] = true
         s.pushCandidate(parent, frontier, u)
 
-defineThunderBeam(beamSearch, State, Action, int, uint64)
+defineSkipBeam(skipBeam, State, Action, int, uint64)
 
 proc solve(beamWidth = Ahc041BeamWidth, minBeamWidth = Ahc041MinBeamWidth,
     timeLimitSec = 1.7): seq[int] =
     let initial = initState()
-    let answer = beamSearch(initial, beamWidth, maxTurns = n, minimize = false,
+    let answer = skipBeam(initial, beamWidth, maxTurns = n, minimize = false,
         timeLimitSec = timeLimitSec, minBeamWidth = minBeamWidth)
     result = newSeq[int](n)
     for p in result.mitems: p = -1

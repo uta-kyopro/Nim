@@ -32,10 +32,11 @@ when not declared BeamSearchModule:
         # var next = self
         # nextに遷移を適用し、next.hashも差分更新する。moveBackwardやparentは不要。
         # next.pushCandidate(frontier, action)
+        # バケット化を使う場合は next.pushCandidate(frontier, action, group = groupId)
         raise newException(ValueError, "implement expand")
 
     # 編集不要：初期Stateと探索条件をcoreに渡し、最良Stateと探索結果を返す。
     template beamSearch*(initial: State, beamWidth: int, maxTurns = 2000,
-        minimize = true): BeamSearchResult[State, CostType, HashType, Action] =
+        minimize = true, groupLimit = 0, groupCount = 0): BeamSearchResult[State, CostType, HashType, Action] =
         runBeamSearch[State, CostType, HashType, Action](
-            initial, beamWidth, maxTurns, minimize)
+            initial, beamWidth, maxTurns, minimize, groupLimit, groupCount)

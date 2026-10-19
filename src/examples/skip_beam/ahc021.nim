@@ -1,7 +1,7 @@
-# AHC021 A - Pyramid Sorting (元のthunder_beam.nimの問題固有部分)
+# AHC021 A - Pyramid Sorting (元のskip_beam.nimの問題固有部分)
 # https://atcoder.jp/contests/ahc021/tasks/ahc021_a
 include ../../lib/header
-import ../../lib/search/thunder_beam_core
+import ../../lib/search/skip_beam_core
 
 const
     N = 30
@@ -199,12 +199,12 @@ proc expand(self:var State, parent: int, multiSelector:var Frontier) =
 proc isFinished(s: State): bool = s.targetBall == M
 proc getHash(s: State): HashType = s.hash
 
-defineThunderBeam(beamSearch, State, Action, CostType, HashType)
+defineSkipBeam(skipBeam, State, Action, CostType, HashType)
 
 proc solve(initial: State, beamWidth = AhcBeamWidth, minBeamWidth = AhcMinBeamWidth,
     timeLimitSec = 1.95): BeamResult[Action, CostType] =
     # 元コードと同じく時間は幅調整に使い、時間だけでは途中終了しない。
-    beamSearch(initial, beamWidth, maxTurns = 2000, timeLimitSec = timeLimitSec,
+    skipBeam(initial, beamWidth, maxTurns = 2000, timeLimitSec = timeLimitSec,
         minBeamWidth = minBeamWidth, stopOnTimeLimit = false)
 
 proc output(initial: State, actions: openArray[Action]) =
