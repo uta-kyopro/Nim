@@ -71,6 +71,44 @@ for action in answer.actions:
 `groupLimit > 0`では`beamWidth`による全体上限の代わりに、各グループ最大`groupLimit`件を選ぶ。
 `groupCount`はグループ数。ID順に安定ソート・Hash重複除去を行い、先のグループを優先する。
 
+## 任意の葉情報
+
+`SkipTourBeamFrontier[Action, Score, Key, LeafData]`と
+`runSkipTourBeam[State, Action, Score, Key, LeafData]`で任意型の保存情報を追加できる。
+`defineSkipTourBeam(search, State, Action, Score, Key, LeafData)`も同じ指定に対応する。
+選抜用の評価値・Hashとは別に、実コスト・補助評価値・集計値などを保持できる。
+
+```nim
+type LeafData = object
+    score, moves: int
+
+template getLeaf(s: State): LeafData = LeafData(score: s.score, moves: s.moves)
+template loadLeaf(s: var State, leaf: LeafData) =
+    s.score = leaf.score
+    s.moves = leaf.moves
+
+defineSkipTourBeam(search, State, Action, int, uint64, LeafData)
+```
+
+`pushCandidate`は仮適用後、評価値の足切りを通過した候補で`getLeaf(state)`を呼び、
+巻き戻す前の値を保存する。未来候補も登録時の値を保持し、到着して展開する時に
+`frontier.currentLeaf`へ渡す。`loadLeaf(state, data)`があればStateへ復元してから`expand`を呼ぶ。
+初期展開は`getLeaf(initial)`を使う。直接登録では
+`frontier.push(action, score, key, leaf = data, step = consumedTurns, ...)`で遷移後の値を必ず渡す。
+親番号の更新・重複候補の改善・グループ選抜でも、その候補の保存情報を引き継ぐ。
+
+盤面専用の`moveBoardForward`・`moveBoardBackward`を使う場合は、
+そこで更新しない保存成分を新形式の`loadLeaf`で必ず復元する。
+通常の遷移だけで巡回する場合は`loadLeaf`を省き、`currentLeaf`だけを使ってもよい。
+保存情報は候補にだけ持たせ、経路の全辺には追加しない。
+ref・seq・stringを含む型も通常代入で扱うが、共有するref/ptrの内容を後から変更しない。
+必要なら`getLeaf`で独立したスナップショットを作り、`loadLeaf`も保存値を書き換えない。
+保存する型が大きいほど候補のメモリ・コピー量は増える。
+
+型指定を省略すれば従来形式のままで、追加の保存領域や`getLeaf`呼出しは生成しない。
+既存の`loadLeaf(state, score, key)`と`currentScore`・`currentHash`もそのまま使える。
+[基本例](../src/examples/skip_tour_beam/basic.nim)は、消費世代数とは異なるAction数も葉から復元する。
+
 ## 戻り値と注意点
 
 `SkipTourBeamResult[Action, Score]`は`score`、`actions`、`turns`、`status`、`selectedCandidates`を返す。

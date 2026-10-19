@@ -10,12 +10,15 @@ when not declared TourBeamModule:
     type
         CostType* = int
         HashType* = uint64
+        LeafData* = object # TODO: 葉ごとに保存し、巡回中の更新を省きたい情報をまとめる。
+            score*: CostType
+            hash*: HashType
         Action* = object # TODO: 1回の遷移と巻き戻しに必要な情報を入れる。
         State* = object # TODO: 盤面・差分計算用の情報を追加する。
             score*: CostType # TODO: 初期化し、適用・巻き戻しで差分更新する。
             hash*: HashType # TODO: 初期化し、適用・巻き戻しで差分更新する。
             isFinished*: bool # TODO: 完了時にtrue。固定ターン探索はfalseのままでよい。
-        Frontier* = TourBeamFrontier[Action, CostType, HashType]
+        Frontier* = TourBeamFrontier[Action, CostType, HashType, LeafData]
 
     # 保持している評価値を返す。必要なら評価式へ書き換える。
     template evaluate*(self: State): CostType = self.score
@@ -39,10 +42,16 @@ when not declared TourBeamModule:
     proc moveBoardBackward*(self: var State, action: Action) =
         self.moveBackward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
 
-    # TODO: 保存値から評価用のStateを復元する。評価式が異なる場合は逆変換する。
-    template loadLeaf*(self: var State, leafScore: CostType, leafKey: HashType) =
-        self.score = leafScore
-        self.hash = leafKey
+    # 葉への保存は巡回中の差分計算を省く一方、候補の保存・コピー量を増やす。
+    # 軽い加減算は差分更新が速い場合もあるため、保存する情報は実測で判断する。
+    # TODO: 遷移後のStateから保存したい値を返す。評価値と異なる実コストなども追加できる。
+    template getLeaf*(self: State): LeafData =
+        LeafData(score: self.score, hash: self.hash)
+
+    # TODO: getLeafで保存した値をStateへ戻す。盤面・履歴は巡回処理が復元する。
+    template loadLeaf*(self: var State, leaf: LeafData) =
+        self.score = leaf.score
+        self.hash = leaf.hash
 
     # TODO: 合法なActionを列挙してself.pushCandidateで登録し、終了時のStateを元に戻す。
     proc expand*(self: var State, frontier: var Frontier) =
@@ -53,7 +62,7 @@ when not declared TourBeamModule:
     # 編集不要：初期Stateと探索条件をcoreに渡し、最良の行動列を返す。
     template tourBeam*(initial: State, beamWidth: int, maxTurns = 2000,
             minimize = true, groupLimit = 0, groupCount = 0): TourBeamResult[Action, CostType] =
-        runTourBeam[State, Action, CostType, HashType](initial, beamWidth,
+        runTourBeam[State, Action, CostType, HashType, LeafData](initial, beamWidth,
             maxTurns, minimize, groupLimit, groupCount)
 
 # let answer = tourBeam(initialState, beamWidth = 1000, maxTurns = 100)

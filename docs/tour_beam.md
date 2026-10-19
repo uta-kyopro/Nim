@@ -62,9 +62,46 @@ coreは`header.nim`を読み込むが、通常ビームやskipBeamには依存�
 
 巡回中の評価値・Hashは古いので、盤面フックから参照しない。
 評価値がStateの保持値と異なる場合は`loadLeaf`で逆変換する。
-生値だけから復元できない成分は盤面フックでも更新する。
+保存する成分を増やしたい場合は、次の任意の葉情報を使う。
 AHC073例は評価値に先読みを含むため、実コストを巡回中も更新し、Hashだけを復元する。
 `expand`は各候補を作るたびにStateを元へ戻す。
+
+## 任意の葉情報
+
+`TourBeamFrontier[Action, Score, Key, LeafData]`と
+`runTourBeam[State, Action, Score, Key, LeafData]`で、任意型の保存情報を追加できる。
+`defineTourBeam(search, State, Action, Score, Key, LeafData)`も同じ指定に対応する。
+`LeafData`はobject・tuple・整数などでよく、選抜用の評価値・Hashとは別に保持する。
+評価値に先読みを含む場合の実コスト、補助評価値、集計値などを保存できる。
+
+```nim
+type LeafData = object
+    score, moves: int
+
+template getLeaf(s: State): LeafData = LeafData(score: s.score, moves: s.moves)
+template loadLeaf(s: var State, leaf: LeafData) =
+    s.score = leaf.score
+    s.moves = leaf.moves
+
+defineTourBeam(search, State, Action, int, uint64, LeafData)
+```
+
+`pushCandidate`は仮適用後、評価値の足切りを通過した候補で`getLeaf(state)`を呼び、
+巻き戻す前の値を保存する。展開時は`frontier.currentLeaf`から参照でき、
+`loadLeaf(state, data)`があればStateへ復元してから`expand`を呼ぶ。
+初期展開でも`getLeaf(initial)`を使う。盤面専用巡回を使う場合は、新形式の`loadLeaf`を必ず実装する。
+通常の遷移だけで巡回する場合は`loadLeaf`を省き、`currentLeaf`だけを使ってもよい。
+直接登録は`frontier.push(action, score, key, leaf = data, ...)`で遷移後の保存情報を必ず渡す。
+
+保存情報は候補の置換・重複除去・グループ選抜と一緒に移動する。
+経路の全辺には保存せず、候補に保持するため、Actionの履歴や復元方法は変わらない。
+ref・seq・stringを含む型は通常代入で扱う。共有するref/ptrの内容を後から変更しない。
+必要なら`getLeaf`で独立したスナップショットを作り、`loadLeaf`も保存値を書き換えない。
+保存する型が大きいほど候補のメモリ・コピー量は増える。
+
+型指定を省略すれば従来形式のままで、追加の保存領域や`getLeaf`呼出しは生成しない。
+既存の`loadLeaf(state, score, key)`と`currentScore`・`currentHash`もそのまま使える。
+[基本例](../src/examples/tour_beam/basic.nim)は評価値とAction数の両方を復元する。
 
 ## 候補選抜と結果
 

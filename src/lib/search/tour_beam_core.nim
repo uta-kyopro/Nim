@@ -26,14 +26,21 @@ when not declared TourBeamCoreModule:
         else:
             state.moveBackward(action)
 
-    # 展開直前に葉の生値を復元する。盤面専用フックを使う場合はloadLeafも実装する。
-    template tourLoadLeaf(state, leafScore, leafKey, ActionType: untyped) =
+    # 任意の葉情報、または従来の評価値・Hashを展開直前に復元する。
+    template tourLoadLeaf(state, frontier, ActionType: untyped) =
         mixin loadLeaf, moveBoardForward, moveBoardBackward
-        when compiles(state.loadLeaf(leafScore, leafKey)):
-            state.loadLeaf(leafScore, leafKey)
-        elif compiles(state.moveBoardForward(default(ActionType))) or
-                compiles(state.moveBoardBackward(default(ActionType))):
-            {.error: "board-only transitions require loadLeaf".}
+        when compiles(frontier.currentLeaf):
+            when compiles(state.loadLeaf(frontier.currentLeaf)):
+                state.loadLeaf(frontier.currentLeaf)
+            elif compiles(state.moveBoardForward(default(ActionType))) or
+                    compiles(state.moveBoardBackward(default(ActionType))):
+                {.error: "board-only transitions require loadLeaf(state, leaf)".}
+        else:
+            when compiles(state.loadLeaf(frontier.currentScore, frontier.currentHash)):
+                state.loadLeaf(frontier.currentScore, frontier.currentHash)
+            elif compiles(state.moveBoardForward(default(ActionType))) or
+                    compiles(state.moveBoardBackward(default(ActionType))):
+                {.error: "board-only transitions require loadLeaf".}
 
     type
         TourBeamStatus* = enum
@@ -44,29 +51,33 @@ when not declared TourBeamCoreModule:
             turns*: int
             status*: TourBeamStatus
             selectedCandidates*: int64
-        TourCandidate[Action, Score, Key] = object
+        TourCandidate[Action, Score, Key, Leaf] = object
             action: Action
             score: Score
             key: Key
             parent: int
+            when Leaf isnot void:
+                leaf: Leaf
         TourHashMap[Key] = object
             keys: seq[Key]
             values: seq[int]
             valid: seq[uint64]
             used: int
-        TourSelector[Action, Score, Key] = ref object
+        TourSelector[Action, Score, Key, Leaf] = ref object
             width, size: int
             minimize, hasFinished: bool
-            candidates: seq[TourCandidate[Action, Score, Key]]
+            candidates: seq[TourCandidate[Action, Score, Key, Leaf]]
             indices: TourHashMap[Key]
             worst: seq[int]
-            finished: TourCandidate[Action, Score, Key]
+            finished: TourCandidate[Action, Score, Key, Leaf]
             groupLimit: int
-            buckets: seq[seq[TourCandidate[Action, Score, Key]]]
-        TourBeamFrontier*[Action, Score, Key] = object
+            buckets: seq[seq[TourCandidate[Action, Score, Key, Leaf]]]
+        TourBeamFrontier*[Action, Score, Key; Leaf = void] = object
             currentScore*: Score # 展開中の葉の評価値。
+            when Leaf isnot void:
+                currentLeaf*: Leaf # 展開中の葉に保存した任意の情報。
             currentHash*: Key # 展開中の葉のHash。
-            selector: TourSelector[Action, Score, Key]
+            selector: TourSelector[Action, Score, Key, Leaf]
             currentParent, remaining: int
         TourTree[State, Action] = object
             state: State
@@ -128,7 +139,7 @@ when not declared TourBeamCoreModule:
         m.values[slot] = value
 
     # 採用中の候補だけでHash表を作り直し、追い出された候補のキーを除く。
-    proc tourRebuildHash[A, S, K](s: TourSelector[A, S, K]) =
+    proc tourRebuildHash[A, S, K, L](s: TourSelector[A, S, K, L]) =
         s.indices.clear()
         for i, c in s.candidates:
             let (_, slot) = s.indices.getIndex(c.key)
@@ -143,7 +154,7 @@ when not declared TourBeamCoreModule:
             if isMinimum: first < second else: second < first
 
     # 有効な2候補のうち評価の悪いindexを返す（同点は左を優先）。
-    template tourWorst[A, S, K](s: TourSelector[A, S, K], a, b: int): int =
+    template tourWorst[A, S, K, L](s: TourSelector[A, S, K, L], a, b: int): int =
         block:
             let selector = s
             let first = a
@@ -153,7 +164,7 @@ when not declared TourBeamCoreModule:
             else: first
 
     # 幅到達時に一括構築し、余った葉は末尾候補を参照させて無効値チェックを省く。
-    proc tourBuild[A, S, K](s: TourSelector[A, S, K]) =
+    proc tourBuild[A, S, K, L](s: TourSelector[A, S, K, L]) =
         s.size = 1
         while s.size < s.width: s.size *= 2
         s.worst.setLen(s.size * 2)
@@ -165,7 +176,7 @@ when not declared TourBeamCoreModule:
             s.worst[i] = s.tourWorst(s.worst[left], s.worst[left or 1])
 
     # 指定候補の変更を反映し、セグ木の根まで最悪候補を更新する。
-    proc tourUpdate[A, S, K](s: TourSelector[A, S, K], index: int) =
+    proc tourUpdate[A, S, K, L](s: TourSelector[A, S, K, L], index: int) =
         var p = (s.size + index) shr 1
         while p > 0:
             let left = p shl 1
@@ -173,7 +184,7 @@ when not declared TourBeamCoreModule:
             p = p shr 1
 
     # 同一キーの改善は、変更スロットが更新前の最悪でなくなった階層から上を省く。
-    proc tourImproveDuplicate[A, S, K](s: TourSelector[A, S, K], index: int) =
+    proc tourImproveDuplicate[A, S, K, L](s: TourSelector[A, S, K, L], index: int) =
         var p = (s.size+index) shr 1
         while p > 0:
             if s.worst[p] != index: break
@@ -182,8 +193,8 @@ when not declared TourBeamCoreModule:
             p = p shr 1
 
     # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
-    proc tourPush[A, S, K](s: TourSelector[A, S, K],
-        candidate: TourCandidate[A, S, K], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
+    proc tourPush[A, S, K, L](s: TourSelector[A, S, K, L],
+        candidate: TourCandidate[A, S, K, L], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
         if finished:
             if not s.hasFinished:
                 s.hasFinished = true
@@ -216,13 +227,13 @@ when not declared TourBeamCoreModule:
         true
 
     # グループID順に重複を除去し、各グループの上位候補を確定する。
-    proc tourSelectGroups[A, S, K](s: TourSelector[A, S, K]) =
+    proc tourSelectGroups[A, S, K, L](s: TourSelector[A, S, K, L]) =
         if s.groupLimit <= 0: return
         var seen = initHashSet[K](0)
         for bucket in s.buckets.mitems:
             # std/algorithm.sort is stable: equal scores retain registration order.
             let minimize = s.minimize
-            bucket.sort(proc(a, b: TourCandidate[A, S, K]): int =
+            bucket.sort(proc(a, b: TourCandidate[A, S, K, L]): int =
                 if tourBetter(a.score, b.score, minimize): -1
                 elif tourBetter(b.score, a.score, minimize): 1
                 else: 0)
@@ -237,27 +248,32 @@ when not declared TourBeamCoreModule:
 
 
     # 次の1層の候補管理を初期化する。groupLimit > 0なら全体幅の代わりにグループ別選抜を使う。
-    proc initTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
-            groupLimit = 0, groupCount = 0): TourBeamFrontier[A, S, K] =
+    proc initTourBeamFrontier*[A, S, K, L](beamWidth: int, minimize = true,
+            groupLimit = 0, groupCount = 0): TourBeamFrontier[A, S, K, L] =
         when defined(debug):
             if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
             if groupLimit < 0 or groupCount < 0 or (groupLimit > 0 and groupCount <= 0):
                 raise newException(ValueError, "invalid group bucket dimensions")
         result.remaining = int.high
-        result.selector = TourSelector[A, S, K](width: beamWidth, minimize: minimize,
+        result.selector = TourSelector[A, S, K, L](width: beamWidth, minimize: minimize,
             groupLimit: groupLimit,
-            candidates: newSeqOfCap[TourCandidate[A, S, K]](if groupLimit > 0: 0 else: beamWidth))
+            candidates: newSeqOfCap[TourCandidate[A, S, K, L]](if groupLimit > 0: 0 else: beamWidth))
         if groupLimit > 0:
-            result.selector.buckets = newSeq[seq[TourCandidate[A, S, K]]](groupCount)
+            result.selector.buckets = newSeq[seq[TourCandidate[A, S, K, L]]](groupCount)
         else:
             result.selector.indices = initTourHashMap[K](beamWidth)
 
+    # 任意の葉情報を追加しない従来形式のフロンティアを初期化する。
+    template initTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
+            groupLimit = 0, groupCount = 0): TourBeamFrontier[A, S, K] =
+        initTourBeamFrontier[A, S, K, void](beamWidth, minimize, groupLimit, groupCount)
+
     # 現在の展開位置から探索上限までの残りターン数を返す。
-    template remainingTurns*[A, S, K](frontier: TourBeamFrontier[A, S, K]): int =
+    template remainingTurns*[A, S, K, L](frontier: TourBeamFrontier[A, S, K, L]): int =
         frontier.remaining
 
     # Hash取得前に足切りする。trueでも同じHashのより良い候補があれば不採用になる。
-    proc canImprove*[A, S, K](frontier: TourBeamFrontier[A, S, K], score: S,
+    proc canImprove*[A, S, K, L](frontier: TourBeamFrontier[A, S, K, L], score: S,
             finished = false, group = -1): bool =
         let s = frontier.selector
         when defined(debug):
@@ -268,17 +284,24 @@ when not declared TourBeamCoreModule:
         s.groupLimit > 0 or s.candidates.len < s.width or
             tourBetter(score, s.candidates[s.worst[1]].score, s.minimize)
 
-    # 評価済みの1ターン遷移を、展開中の親に自動で関連付けて登録する。
+    # 評価済み候補を登録する。leafには遷移後の任意の保存情報を渡す。
+    proc push*[A, S, K, L](frontier: var TourBeamFrontier[A, S, K, L], action: A,
+            score: S, key: K, leaf: L, finished = false, group = -1): bool {.discardable.} =
+        if not frontier.canImprove(score, finished, group): return false
+        frontier.selector.tourPush(TourCandidate[A, S, K, L](action: action, score: score,
+            key: key, leaf: leaf, parent: frontier.currentParent), finished, group, true)
+
+    # 任意の葉情報を追加しない従来形式の候補を登録する。
     proc push*[A, S, K](frontier: var TourBeamFrontier[A, S, K], action: A,
             score: S, key: K, finished = false, group = -1): bool {.discardable.} =
         if not frontier.canImprove(score, finished, group): return false
-        frontier.selector.tourPush(TourCandidate[A, S, K](action: action, score: score,
+        frontier.selector.tourPush(TourCandidate[A, S, K, void](action: action, score: score,
             key: key, parent: frontier.currentParent), finished, group, true)
 
     # Actionを仮適用して評価・必要時のHash取得・巻き戻しを行い、候補を登録する。
-    proc pushCandidate*[T, A, S, K](self: var T, frontier: var TourBeamFrontier[A, S, K],
+    proc pushCandidate*[T, A, S, K, L](self: var T, frontier: var TourBeamFrontier[A, S, K, L],
             action: A, group = -1): bool {.discardable.} =
-        mixin moveForward, moveBackward, evaluate, getHash
+        mixin moveForward, moveBackward, evaluate, getHash, getLeaf
         if frontier.remaining <= 0: return false
         self.moveForward(action)
         let score = self.evaluate()
@@ -287,9 +310,11 @@ when not declared TourBeamCoreModule:
             self.moveBackward(action)
             return false
         let key = self.getHash()
+        var candidate = TourCandidate[A, S, K, L](action: action, score: score,
+            key: key, parent: frontier.currentParent)
+        when L isnot void: candidate.leaf = self.getLeaf()
         self.moveBackward(action)
-        frontier.selector.tourPush(TourCandidate[A, S, K](action: action, score: score,
-            key: key, parent: frontier.currentParent), finished, group, true)
+        frontier.selector.tourPush(candidate, finished, group, true)
 
     # 重ならない経路断片を一括コピーし、参照管理が必要なActionは通常代入する。
     proc tourCopyRange[A](dest: var seq[A], offset: int, source: seq[A], first, count: int) =
@@ -311,8 +336,8 @@ when not declared TourBeamCoreModule:
                 progress = rank
 
     # 親の葉番号で計数整列し、候補全体のソートを避けて経路順の巡回位置を作る。
-    proc tourOrder[T, A, S, K](tree: var TourTree[T, A],
-            candidates: seq[TourCandidate[A, S, K]]) =
+    proc tourOrder[T, A, S, K, L](tree: var TourTree[T, A],
+            candidates: seq[TourCandidate[A, S, K, L]]) =
         tree.offsets.setLen(tree.leaves.len)
         for count in tree.offsets.mitems: count = 0
         for c in candidates: inc tree.offsets[c.parent]
@@ -327,8 +352,8 @@ when not declared TourBeamCoreModule:
             inc tree.offsets[c.parent]
 
     # 共通祖先まで戻って別経路を適用し、採用候補だけを展開して次の経路配列を作る。
-    proc tourExpand[T, A, S, K](tree: var TourTree[T, A],
-            candidates: seq[TourCandidate[A, S, K]], frontier: var TourBeamFrontier[A, S, K]) =
+    proc tourExpand[T, A, S, K, L](tree: var TourTree[T, A],
+            candidates: seq[TourCandidate[A, S, K, L]], frontier: var TourBeamFrontier[A, S, K, L]) =
         mixin moveForward, moveBackward, expand
         tree.tourOrder(candidates)
         let depth = tree.trace.len
@@ -363,7 +388,8 @@ when not declared TourBeamCoreModule:
             tree.expandedLeaves[slot] = nextLeaf
             frontier.currentScore = candidates[slot].score
             frontier.currentHash = candidates[slot].key
-            tourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
+            when L isnot void: frontier.currentLeaf = candidates[slot].leaf
+            tourLoadLeaf(tree.state, frontier, A)
             tree.state.expand(frontier)
             tree.nextLeaves[nextLeaf] = appended
             inc nextLeaf
@@ -373,20 +399,20 @@ when not declared TourBeamCoreModule:
         swap(tree.leaves, tree.nextLeaves)
 
     # 候補配列を走査して最良スロットを返す。同点では小さいスロットを選ぶ。
-    proc tourBest[A, S, K](candidates: seq[TourCandidate[A, S, K]], minimize: bool): int =
+    proc tourBest[A, S, K, L](candidates: seq[TourCandidate[A, S, K, L]], minimize: bool): int =
         for i in 1..<candidates.len:
             if tourBetter(candidates[i].score, candidates[result].score, minimize): result = i
 
     # 1ターンずつ経路配列で探索し、終了時だけ最良の行動列を復元する。
-    proc runTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
+    proc runTourBeam*[State, Action, Score, Key, Leaf](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
             groupCount = 0): TourBeamResult[Action, Score] =
-        mixin evaluate, expand, getHash
+        mixin evaluate, expand, getHash, getLeaf
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
-        var frontier = initTourBeamFrontier[Action, Score, Key](beamWidth, minimize, groupLimit, groupCount)
+        var frontier = initTourBeamFrontier[Action, Score, Key, Leaf](beamWidth, minimize, groupLimit, groupCount)
         var tree = TourTree[State, Action](state: initial, leaves: @[0])
-        var current: seq[TourCandidate[Action, Score, Key]]
+        var current: seq[TourCandidate[Action, Score, Key, Leaf]]
         result.score = tree.state.evaluate()
         result.status = beamMaxTurns
         if tourFinishedField(tree.state):
@@ -397,7 +423,8 @@ when not declared TourBeamCoreModule:
             if turn == 1:
                 frontier.currentScore = result.score
                 frontier.currentHash = tree.state.getHash()
-                tourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, Action)
+                when Leaf isnot void: frontier.currentLeaf = tree.state.getLeaf()
+                tourLoadLeaf(tree.state, frontier, Action)
                 tree.state.expand(frontier)
             else:
                 tree.tourExpand(current, frontier)
@@ -429,10 +456,17 @@ when not declared TourBeamCoreModule:
             s.candidates.setLen(0)
             s.indices.clear()
 
+    # 任意の葉情報を追加しない従来形式の評価値・Hashで探索する。
+    template runTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
+            maxTurns = 2000, minimize = true, groupLimit = 0,
+            groupCount = 0): TourBeamResult[Action, Score] =
+        runTourBeam[State, Action, Score, Key, void](initial, beamWidth,
+            maxTurns, minimize, groupLimit, groupCount)
+
     # State・Action・評価値・Hashの型を固定し、指定名の探索関数を定義する。
-    template defineTourBeam*(name, State, Action, Score, Key: untyped) =
+    template defineTourBeam*(name, State, Action, Score, Key: untyped, Leaf: untyped = void) =
         # 型を固定した1ターン遷移の探索条件をcoreへ渡す。
         template name(initial: State, beamWidth: int, maxTurns = 2000,
                 minimize = true, groupLimit = 0, groupCount = 0): TourBeamResult[Action, Score] =
-            runTourBeam[State, Action, Score, Key](initial, beamWidth, maxTurns,
+            runTourBeam[State, Action, Score, Key, Leaf](initial, beamWidth, maxTurns,
                 minimize, groupLimit, groupCount)

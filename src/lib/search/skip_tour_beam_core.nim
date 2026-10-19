@@ -26,14 +26,21 @@ when not declared SkipTourBeamCoreModule:
         else:
             state.moveBackward(action)
 
-    # 展開直前に葉の生値を復元する。盤面専用フックを使う場合はloadLeafも実装する。
-    template skipTourLoadLeaf(state, leafScore, leafKey, ActionType: untyped) =
+    # 任意の葉情報、または従来の評価値・Hashを展開直前に復元する。
+    template skipTourLoadLeaf(state, frontier, ActionType: untyped) =
         mixin loadLeaf, moveBoardForward, moveBoardBackward
-        when compiles(state.loadLeaf(leafScore, leafKey)):
-            state.loadLeaf(leafScore, leafKey)
-        elif compiles(state.moveBoardForward(default(ActionType))) or
-                compiles(state.moveBoardBackward(default(ActionType))):
-            {.error: "board-only transitions require loadLeaf".}
+        when compiles(frontier.currentLeaf):
+            when compiles(state.loadLeaf(frontier.currentLeaf)):
+                state.loadLeaf(frontier.currentLeaf)
+            elif compiles(state.moveBoardForward(default(ActionType))) or
+                    compiles(state.moveBoardBackward(default(ActionType))):
+                {.error: "board-only transitions require loadLeaf(state, leaf)".}
+        else:
+            when compiles(state.loadLeaf(frontier.currentScore, frontier.currentHash)):
+                state.loadLeaf(frontier.currentScore, frontier.currentHash)
+            elif compiles(state.moveBoardForward(default(ActionType))) or
+                    compiles(state.moveBoardBackward(default(ActionType))):
+                {.error: "board-only transitions require loadLeaf".}
 
     type
         SkipTourBeamStatus* = enum
@@ -44,29 +51,33 @@ when not declared SkipTourBeamCoreModule:
             turns*: int
             status*: SkipTourBeamStatus
             selectedCandidates*: int64
-        SkipTourCandidate[Action, Score, Key] = object
+        SkipTourCandidate[Action, Score, Key, Leaf] = object
             action: Action
             score: Score
             key: Key
             parent: int
+            when Leaf isnot void:
+                leaf: Leaf
         SkipTourHashMap[Key] = object
             keys: seq[Key]
             values: seq[int]
             valid: seq[uint64]
             used: int
-        SkipTourSelector[Action, Score, Key] = ref object
+        SkipTourSelector[Action, Score, Key, Leaf] = ref object
             width, size: int
             minimize, hasFinished: bool
-            candidates: seq[SkipTourCandidate[Action, Score, Key]]
+            candidates: seq[SkipTourCandidate[Action, Score, Key, Leaf]]
             indices: SkipTourHashMap[Key]
             worst: seq[int]
-            finished: SkipTourCandidate[Action, Score, Key]
+            finished: SkipTourCandidate[Action, Score, Key, Leaf]
             groupLimit, groupCount: int
-            buckets: seq[seq[SkipTourCandidate[Action, Score, Key]]]
-        SkipTourBeamFrontier*[Action, Score, Key] = object
+            buckets: seq[seq[SkipTourCandidate[Action, Score, Key, Leaf]]]
+        SkipTourBeamFrontier*[Action, Score, Key; Leaf = void] = object
             currentScore*: Score # 展開中の葉に保存されていた評価値。
+            when Leaf isnot void:
+                currentLeaf*: Leaf # 展開中の葉に保存した任意の情報。
             currentHash*: Key # 展開中の葉に保存されていたHash。
-            selectors: Deque[SkipTourSelector[Action, Score, Key]]
+            selectors: Deque[SkipTourSelector[Action, Score, Key, Leaf]]
             width, groupLimit, groupCount, currentParent, remaining: int
             minimize: bool
         SkipTourTree[State, Action] = object
@@ -135,7 +146,7 @@ when not declared SkipTourBeamCoreModule:
         m.values[slot] = value
 
     # 採用中の候補だけでHash表を作り直し、追い出された候補のキーを除く。
-    proc skipTourRebuildHash[A, S, K](s: SkipTourSelector[A, S, K]) =
+    proc skipTourRebuildHash[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
         s.indices.clear()
         for i, c in s.candidates:
             let (_, slot) = s.indices.getIndex(c.key)
@@ -150,7 +161,7 @@ when not declared SkipTourBeamCoreModule:
             if isMinimum: first < second else: second < first
 
     # 有効な2候補のうち評価の悪いindexを返す（同点は左を優先）。
-    template skipTourWorst[A, S, K](s: SkipTourSelector[A, S, K], a, b: int): int =
+    template skipTourWorst[A, S, K, L](s: SkipTourSelector[A, S, K, L], a, b: int): int =
         block:
             let selector = s
             let first = a
@@ -160,7 +171,7 @@ when not declared SkipTourBeamCoreModule:
             else: first
 
     # 幅到達時に一括構築し、余った葉は末尾候補を参照させて無効値チェックを省く。
-    proc skipTourBuild[A, S, K](s: SkipTourSelector[A, S, K]) =
+    proc skipTourBuild[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
         s.size = 1
         while s.size < s.width: s.size *= 2
         s.worst.setLen(s.size * 2)
@@ -172,7 +183,7 @@ when not declared SkipTourBeamCoreModule:
             s.worst[i] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
 
     # 指定候補の変更を反映し、セグ木の根まで最悪候補を更新する。
-    proc skipTourUpdate[A, S, K](s: SkipTourSelector[A, S, K], index: int) =
+    proc skipTourUpdate[A, S, K, L](s: SkipTourSelector[A, S, K, L], index: int) =
         var p = (s.size + index) shr 1
         while p > 0:
             let left = p shl 1
@@ -180,7 +191,7 @@ when not declared SkipTourBeamCoreModule:
             p = p shr 1
 
     # 同一キーの改善は、変更スロットが更新前の最悪でなくなった階層から上を省く。
-    proc skipTourImproveDuplicate[A, S, K](s: SkipTourSelector[A, S, K], index: int) =
+    proc skipTourImproveDuplicate[A, S, K, L](s: SkipTourSelector[A, S, K, L], index: int) =
         var p = (s.size+index) shr 1
         while p > 0:
             if s.worst[p] != index: break
@@ -189,8 +200,8 @@ when not declared SkipTourBeamCoreModule:
             p = p shr 1
 
     # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
-    proc skipTourPush[A, S, K](s: SkipTourSelector[A, S, K],
-        candidate: SkipTourCandidate[A, S, K], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
+    proc skipTourPush[A, S, K, L](s: SkipTourSelector[A, S, K, L],
+        candidate: SkipTourCandidate[A, S, K, L], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
         if finished:
             if not s.hasFinished:
                 s.hasFinished = true
@@ -203,7 +214,7 @@ when not declared SkipTourBeamCoreModule:
             return true
         if s.indices.keys.len == 0:
             s.indices = initSkipTourHashMap[K](s.width)
-            s.candidates = newSeqOfCap[SkipTourCandidate[A, S, K]](s.width)
+            s.candidates = newSeqOfCap[SkipTourCandidate[A, S, K, L]](s.width)
         let full = s.candidates.len == s.width
         when not scoreChecked:
             if full and not skipTourBetter(candidate.score,
@@ -227,13 +238,13 @@ when not declared SkipTourBeamCoreModule:
         true
 
     # グループID順に重複を除去し、各グループの上位候補を確定する。
-    proc skipTourSelectGroups[A, S, K](s: SkipTourSelector[A, S, K]) =
+    proc skipTourSelectGroups[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
         if s.groupLimit <= 0: return
         var seen = initHashSet[K](0)
         for bucket in s.buckets.mitems:
             # std/algorithm.sort is stable: equal scores retain registration order.
             let minimize = s.minimize
-            bucket.sort(proc(a, b: SkipTourCandidate[A, S, K]): int =
+            bucket.sort(proc(a, b: SkipTourCandidate[A, S, K, L]): int =
                 if skipTourBetter(a.score, b.score, minimize): -1
                 elif skipTourBetter(b.score, a.score, minimize): 1
                 else: 0)
@@ -248,13 +259,13 @@ when not declared SkipTourBeamCoreModule:
 
 
     # 到達世代ごとの選抜器を作る。確保した領域は世代を進めても再利用する。
-    proc skipTourSelector[A, S, K](f: SkipTourBeamFrontier[A, S, K]): SkipTourSelector[A, S, K] =
-        result = SkipTourSelector[A, S, K](width: f.width, minimize: f.minimize,
+    proc skipTourSelector[A, S, K, L](f: SkipTourBeamFrontier[A, S, K, L]): SkipTourSelector[A, S, K, L] =
+        result = SkipTourSelector[A, S, K, L](width: f.width, minimize: f.minimize,
             groupLimit: f.groupLimit, groupCount: f.groupCount)
 
     # 固定幅と到達世代別の候補管理を初期化する。
-    proc initSkipTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
-            groupLimit = 0, groupCount = 0): SkipTourBeamFrontier[A, S, K] =
+    proc initSkipTourBeamFrontier*[A, S, K, L](beamWidth: int, minimize = true,
+            groupLimit = 0, groupCount = 0): SkipTourBeamFrontier[A, S, K, L] =
         when defined(debug):
             if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
             if groupLimit < 0 or groupCount < 0 or (groupLimit > 0 and groupCount <= 0):
@@ -266,12 +277,17 @@ when not declared SkipTourBeamCoreModule:
         result.remaining = int.high
         result.currentParent = -1
 
+    # 任意の葉情報を追加しない従来形式のフロンティアを初期化する。
+    template initSkipTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
+            groupLimit = 0, groupCount = 0): SkipTourBeamFrontier[A, S, K] =
+        initSkipTourBeamFrontier[A, S, K, void](beamWidth, minimize, groupLimit, groupCount)
+
     # 現在位置から探索上限までの残り世代数を返す。
-    template remainingTurns*[A, S, K](frontier: SkipTourBeamFrontier[A, S, K]): int =
+    template remainingTurns*[A, S, K, L](frontier: SkipTourBeamFrontier[A, S, K, L]): int =
         frontier.remaining
 
     # 世代とグループを検証し、Hash取得前に候補を足切りする。
-    proc canImprove*[A, S, K](frontier: SkipTourBeamFrontier[A, S, K], score: S,
+    proc canImprove*[A, S, K, L](frontier: SkipTourBeamFrontier[A, S, K, L], score: S,
             step = 1, finished = false, group = -1): bool =
         when defined(debug):
             if step <= 0: raise newException(ValueError, "beam step must be positive")
@@ -285,22 +301,29 @@ when not declared SkipTourBeamCoreModule:
             skipTourBetter(score, s.candidates[s.worst[1]].score, s.minimize)
 
     # 選抜済みの評価値と現在の親を指定step先へ登録する。
-    proc skipTourRegister[A, S, K](f: var SkipTourBeamFrontier[A, S, K], action: A,
-            score: S, key: K, step: int, finished: bool, group: int): bool =
+    proc skipTourRegister[A, S, K, L](f: var SkipTourBeamFrontier[A, S, K, L],
+            candidate: SkipTourCandidate[A, S, K, L], step: int, finished: bool, group: int): bool =
         while f.selectors.len < step: f.selectors.addLast(f.skipTourSelector())
-        f.selectors[step-1].skipTourPush(SkipTourCandidate[A, S, K](
-            action: action, score: score, key: key, parent: f.currentParent), finished, group, true)
+        f.selectors[step-1].skipTourPush(candidate, finished, group, true)
 
-    # 評価済み候補を、展開中の親から指定step先へ登録する。
+    # 評価済み候補と遷移後の任意の保存情報を、指定step先へ登録する。
+    proc push*[A, S, K, L](frontier: var SkipTourBeamFrontier[A, S, K, L], action: A,
+            score: S, key: K, leaf: L, finished = false, step = 1, group = -1): bool {.discardable.} =
+        if not frontier.canImprove(score, step, finished, group): return false
+        frontier.skipTourRegister(SkipTourCandidate[A, S, K, L](action: action,
+            score: score, key: key, leaf: leaf, parent: frontier.currentParent), step, finished, group)
+
+    # 任意の葉情報を追加しない従来形式の候補を指定step先へ登録する。
     proc push*[A, S, K](frontier: var SkipTourBeamFrontier[A, S, K], action: A,
             score: S, key: K, finished = false, step = 1, group = -1): bool {.discardable.} =
         if not frontier.canImprove(score, step, finished, group): return false
-        frontier.skipTourRegister(action, score, key, step, finished, group)
+        frontier.skipTourRegister(SkipTourCandidate[A, S, K, void](action: action,
+            score: score, key: key, parent: frontier.currentParent), step, finished, group)
 
     # 仮適用・評価・必要時のHash取得・巻き戻し後、指定step先へ候補を登録する。
-    proc pushCandidate*[T, A, S, K](self: var T, frontier: var SkipTourBeamFrontier[A, S, K],
+    proc pushCandidate*[T, A, S, K, L](self: var T, frontier: var SkipTourBeamFrontier[A, S, K, L],
             action: A, step = 1, group = -1): bool {.discardable.} =
-        mixin moveForward, moveBackward, evaluate, getHash, moveBoardForward, moveBoardBackward, loadLeaf
+        mixin moveForward, moveBackward, evaluate, getHash, getLeaf, moveBoardForward, moveBoardBackward, loadLeaf
         when defined(debug):
             if step <= 0: raise newException(ValueError, "beam step must be positive")
         if step > frontier.remaining: return false
@@ -311,8 +334,11 @@ when not declared SkipTourBeamCoreModule:
             self.moveBackward(action)
             return false
         let key = self.getHash()
+        var candidate = SkipTourCandidate[A, S, K, L](action: action, score: score,
+            key: key, parent: frontier.currentParent)
+        when L isnot void: candidate.leaf = self.getLeaf()
         self.moveBackward(action)
-        frontier.skipTourRegister(action, score, key, step, finished, group)
+        frontier.skipTourRegister(candidate, step, finished, group)
 
     # 重ならないAction区間を一括コピーし、参照管理が必要な型は通常代入する。
     proc skipTourCopyRange[A](dest: var seq[A], offset: int, source: seq[A], first, count: int) =
@@ -335,12 +361,12 @@ when not declared SkipTourBeamCoreModule:
                 result.setLen(result.len-1)
 
     # 世代終了時の最良候補を走査する。同点は小さいスロットを優先する。
-    proc skipTourBest[A, S, K](candidates: seq[SkipTourCandidate[A, S, K]], minimize: bool): int =
+    proc skipTourBest[A, S, K, L](candidates: seq[SkipTourCandidate[A, S, K, L]], minimize: bool): int =
         for i in 1..<candidates.len:
             if skipTourBetter(candidates[i].score, candidates[result].score, minimize): result = i
 
     # 選抜器が参照する旧親を、新しいツアー配列の位置へ置き換える。
-    proc skipTourRemap[A, S, K](s: SkipTourSelector[A, S, K], remap: seq[int]) =
+    proc skipTourRemap[A, S, K, L](s: SkipTourSelector[A, S, K, L], remap: seq[int]) =
         template fix(c: untyped) =
             if c.parent >= 0: c.parent = max(-1, remap[c.parent])
             elif c.parent < -1: c.parent = -c.parent-2
@@ -375,8 +401,8 @@ when not declared SkipTourBeamCoreModule:
         commonDepth = depth
 
     # 親ごとの候補リストを逆順の先頭追加で作り、スロット昇順を保つ。
-    proc skipTourGroupChildren[T, A, S, K](tree: var SkipTourTree[T, A],
-            chosen: seq[SkipTourCandidate[A, S, K]]) =
+    proc skipTourGroupChildren[T, A, S, K, L](tree: var SkipTourTree[T, A],
+            chosen: seq[SkipTourCandidate[A, S, K, L]]) =
         if tree.head.len < tree.actions.len+1: tree.head.setLen(tree.actions.len+1)
         tree.next.setLen(chosen.len)
         for slot in countdown(chosen.high, 0):
@@ -385,9 +411,9 @@ when not declared SkipTourBeamCoreModule:
             tree.head[parent] = slot+1
 
     # 同じ親から選ばれた子を展開し、最後の子のStateをそのまま保持する。
-    proc skipTourChildren[T, A, S, K](tree: var SkipTourTree[T, A],
-            chosen: seq[SkipTourCandidate[A, S, K]], best, parent: int,
-            frontier: var SkipTourBeamFrontier[A, S, K], firstMove: var bool,
+    proc skipTourChildren[T, A, S, K, L](tree: var SkipTourTree[T, A],
+            chosen: seq[SkipTourCandidate[A, S, K, L]], best, parent: int,
+            frontier: var SkipTourBeamFrontier[A, S, K, L], firstMove: var bool,
             commonDepth, newSaved, remaining: var int) =
         mixin expand
         var link = tree.head[parent+1]
@@ -408,7 +434,8 @@ when not declared SkipTourBeamCoreModule:
             frontier.currentParent = -node-2
             frontier.currentScore = chosen[slot].score
             frontier.currentHash = chosen[slot].key
-            skipTourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
+            when L isnot void: frontier.currentLeaf = chosen[slot].leaf
+            skipTourLoadLeaf(tree.state, frontier, A)
             tree.state.expand(frontier)
             tree.nextEvents[tree.eventCount] = -node-1
             inc tree.eventCount
@@ -422,7 +449,7 @@ when not declared SkipTourBeamCoreModule:
                 tree.traceIds[^1] = node
 
     # 通常候補・完了候補・未選抜のグループ保留があるかを調べる。
-    template skipTourHasCandidates[A, S, K](selector: SkipTourSelector[A, S, K]): bool =
+    template skipTourHasCandidates[A, S, K, L](selector: SkipTourSelector[A, S, K, L]): bool =
         block:
             let pendingSelector = selector
             var found = pendingSelector.hasFinished or pendingSelector.candidates.len > 0
@@ -442,16 +469,16 @@ when not declared SkipTourBeamCoreModule:
             tree.events[other] = -event
 
     # 将来候補が参照する親が残っているかを調べる。
-    proc skipTourHasPending[A, S, K](frontier: SkipTourBeamFrontier[A, S, K]): bool =
+    proc skipTourHasPending[A, S, K, L](frontier: SkipTourBeamFrontier[A, S, K, L]): bool =
         for selector in frontier.selectors.items:
             if selector.hasFinished or selector.candidates.len > 0: return true
             for bucket in selector.buckets:
                 if bucket.len > 0: return true
 
     # 待機候補がない層は旧ツアーを1回だけ巡回し、採用した枝の経路だけを直接残す。
-    proc skipTourAdvanceSingle[T, A, S, K](tree: var SkipTourTree[T, A],
-            chosen: seq[SkipTourCandidate[A, S, K]], best: int,
-            frontier: var SkipTourBeamFrontier[A, S, K]) =
+    proc skipTourAdvanceSingle[T, A, S, K, L](tree: var SkipTourTree[T, A],
+            chosen: seq[SkipTourCandidate[A, S, K, L]], best: int,
+            frontier: var SkipTourBeamFrontier[A, S, K, L]) =
         tree.remap.setLen(tree.actions.len)
         tree.skipTourGroupChildren(chosen)
         var first = 0
@@ -523,9 +550,9 @@ when not declared SkipTourBeamCoreModule:
         swap(tree.events, tree.nextEvents)
 
     # 待機経路を圧縮し、逆向きに巡回して前世代の末尾に近い枝から展開する。
-    proc skipTourAdvance[T, A, S, K](tree: var SkipTourTree[T, A],
-            chosen: seq[SkipTourCandidate[A, S, K]], best: int,
-            frontier: var SkipTourBeamFrontier[A, S, K]) =
+    proc skipTourAdvance[T, A, S, K, L](tree: var SkipTourTree[T, A],
+            chosen: seq[SkipTourCandidate[A, S, K, L]], best: int,
+            frontier: var SkipTourBeamFrontier[A, S, K, L]) =
         tree.needed.setLen(tree.actions.len)
         tree.direct.setLen(tree.actions.len)
         tree.remap.setLen(tree.actions.len)
@@ -632,13 +659,13 @@ when not declared SkipTourBeamCoreModule:
         swap(tree.events, tree.nextEvents)
 
     # 指定世代へ進み、待機経路を含む配列だけで探索と行動列の復元を行う。
-    proc runSkipTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
+    proc runSkipTourBeam*[State, Action, Score, Key, Leaf](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
             groupCount = 0): SkipTourBeamResult[Action, Score] =
-        mixin evaluate, expand, getHash
+        mixin evaluate, expand, getHash, getLeaf
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
-        var frontier = initSkipTourBeamFrontier[Action, Score, Key](beamWidth, minimize, groupLimit, groupCount)
+        var frontier = initSkipTourBeamFrontier[Action, Score, Key, Leaf](beamWidth, minimize, groupLimit, groupCount)
         var tree = SkipTourTree[State, Action](state: initial, saved: -1)
         result.score = tree.state.evaluate()
         result.status = beamMaxTurns
@@ -649,7 +676,8 @@ when not declared SkipTourBeamCoreModule:
         frontier.remaining = maxTurns
         frontier.currentScore = result.score
         frontier.currentHash = tree.state.getHash()
-        skipTourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, Action)
+        when Leaf isnot void: frontier.currentLeaf = tree.state.getLeaf()
+        skipTourLoadLeaf(tree.state, frontier, Action)
         tree.state.expand(frontier)
         var turn = 1
         var reversePending = false
@@ -711,10 +739,17 @@ when not declared SkipTourBeamCoreModule:
             inc turn
         result.actions = tree.skipTourPath(tree.saved)
 
+    # 任意の葉情報を追加しない従来形式の評価値・Hashで探索する。
+    template runSkipTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
+            maxTurns = 2000, minimize = true, groupLimit = 0,
+            groupCount = 0): SkipTourBeamResult[Action, Score] =
+        runSkipTourBeam[State, Action, Score, Key, void](initial, beamWidth,
+            maxTurns, minimize, groupLimit, groupCount)
+
     # 問題の型を固定した探索関数を指定名で定義する。
-    template defineSkipTourBeam*(name, State, Action, Score, Key: untyped) =
+    template defineSkipTourBeam*(name, State, Action, Score, Key: untyped, Leaf: untyped = void) =
         # 初期Stateと固定幅・世代上限・グループ設定をcoreへ渡す。
         template name(initial: State, beamWidth: int, maxTurns = 2000,
                 minimize = true, groupLimit = 0, groupCount = 0): SkipTourBeamResult[Action, Score] =
-            runSkipTourBeam[State, Action, Score, Key](initial, beamWidth, maxTurns,
+            runSkipTourBeam[State, Action, Score, Key, Leaf](initial, beamWidth, maxTurns,
                 minimize, groupLimit, groupCount)
