@@ -56,7 +56,9 @@
         │   ├── beam_search_core.nim               # 2層のNode配列・Hash重複排除・セグ木選抜
         │   ├── simulated_annealing.nim            # 時間制限・温度更新・巻き戻しを備えた焼きなましのテンプレート
         │   ├── skip_beam.nim                      # 問題ごとの型・評価・遷移・展開を編集するテンプレート
-        │   └── skip_beam_core.nim                 # 差分更新・複数ターン遷移対応の探索エンジン
+        │   ├── skip_beam_core.nim                 # 差分更新・複数ターン遷移対応の探索エンジン
+        │   ├── tour_beam.nim                      # 経路配列型・1ターン遷移専用の編集用テンプレート
+        │   └── tour_beam_core.nim                 # 経路配列・葉の境界による差分更新探索エンジン
         └── utils/
             └── timer.nim                          # 単調時計による経過時間・期限判定Timer
 ```

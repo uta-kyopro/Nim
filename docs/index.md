@@ -5,6 +5,7 @@
 - [Wavelet Matrix](wavelet_matrix.md)：静的配列の区間順位・個数・前後検索（自作・座標圧縮対応）
 - [Range Query](range_query.md)：AOJ DSL_2_A〜Iの全操作と使い分け
 - [Skip Beam Search](skip_beam.md)：初期状態・幅を指定する差分更新ビームサーチ
+- [Tour Beam Search](tour_beam.md)：経路配列を巡回する1ターン遷移専用の差分更新ビームサーチ（AHC073例）
 - [Beam Search](beam_search.md)：Stateをコピーし、セグ木で選抜する通常のビームサーチ（AHC073例）
 - [Simulated Annealing](simulated_annealing.md)：焼きなましの編集用テンプレートと順列ソートの例
 - [外部ライブラリ](external_libraries.md)：bigints・bignum・regex・SATの使用例、再現した不具合と回避方法
