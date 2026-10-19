@@ -61,7 +61,7 @@ when not declared SkipTourBeamCoreModule:
             indices: SkipTourHashMap[Key]
             worst: seq[int]
             finished: SkipTourCandidate[Action, Score, Key]
-            groupLimit: int
+            groupLimit, groupCount: int
             buckets: seq[seq[SkipTourCandidate[Action, Score, Key]]]
         SkipTourBeamFrontier*[Action, Score, Key] = object
             currentScore*: Score # 展開中の葉に保存されていた評価値。
@@ -79,6 +79,8 @@ when not declared SkipTourBeamCoreModule:
             needed, direct: seq[bool]
             stack, remap, order, offsets: seq[int]
             saved: int
+            confirmedPrefix: int # Stateと履歴IDの一致を確認済みの確定接頭辞長。
+            actionCount, eventCount: int
 
     # Stateに実在するboolフィールドだけを読み、旧判定関数形式は受け付けない。
     template skipTourFinishedField(state: typed): bool =
@@ -177,6 +179,15 @@ when not declared SkipTourBeamCoreModule:
             s.worst[p] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
             p = p shr 1
 
+    # 同一キーの改善は、変更スロットが更新前の最悪でなくなった階層から上を省く。
+    proc skipTourImproveDuplicate[A, S, K](s: SkipTourSelector[A, S, K], index: int) =
+        var p = (s.size+index) shr 1
+        while p > 0:
+            if s.worst[p] != index: break
+            let left = p shl 1
+            s.worst[p] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
+            p = p shr 1
+
     # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
     proc skipTourPush[A, S, K](s: SkipTourSelector[A, S, K],
         candidate: SkipTourCandidate[A, S, K], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
@@ -187,8 +198,12 @@ when not declared SkipTourBeamCoreModule:
                 return true
             return false
         if s.groupLimit > 0:
+            if s.buckets.len == 0: s.buckets.setLen(s.groupCount)
             s.buckets[group].add(candidate)
             return true
+        if s.indices.keys.len == 0:
+            s.indices = initSkipTourHashMap[K](s.width)
+            s.candidates = newSeqOfCap[SkipTourCandidate[A, S, K]](s.width)
         let full = s.candidates.len == s.width
         when not scoreChecked:
             if full and not skipTourBetter(candidate.score,
@@ -199,7 +214,7 @@ when not declared SkipTourBeamCoreModule:
         if old >= 0 and s.candidates[old].key == candidate.key:
             if not skipTourBetter(candidate.score, s.candidates[old].score, s.minimize): return false
             s.candidates[old] = candidate
-            if full: s.skipTourUpdate(old)
+            if full: s.skipTourImproveDuplicate(old)
         elif full:
             let index = s.worst[1]
             s.candidates[index] = candidate
@@ -235,12 +250,7 @@ when not declared SkipTourBeamCoreModule:
     # 到達世代ごとの選抜器を作る。確保した領域は世代を進めても再利用する。
     proc skipTourSelector[A, S, K](f: SkipTourBeamFrontier[A, S, K]): SkipTourSelector[A, S, K] =
         result = SkipTourSelector[A, S, K](width: f.width, minimize: f.minimize,
-            groupLimit: f.groupLimit,
-            candidates: newSeqOfCap[SkipTourCandidate[A, S, K]](f.width))
-        if f.groupLimit > 0:
-            result.buckets = newSeq[seq[SkipTourCandidate[A, S, K]]](f.groupCount)
-        else:
-            result.indices = initSkipTourHashMap[K](f.width)
+            groupLimit: f.groupLimit, groupCount: f.groupCount)
 
     # 固定幅と到達世代別の候補管理を初期化する。
     proc initSkipTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
@@ -346,7 +356,7 @@ when not declared SkipTourBeamCoreModule:
         let depth = tree.prefix.len+tree.stack.len
         var common = min(commonDepth, depth)
         if firstMove:
-            common = 0
+            common = tree.confirmedPrefix
             while common < min(tree.trace.len, depth):
                 let id = if common < tree.prefix.len: -common-2
                     else: tree.stack[common-tree.prefix.len]
@@ -376,9 +386,11 @@ when not declared SkipTourBeamCoreModule:
             tree.skipTourMoveParent(firstMove, commonDepth)
             let slot = tree.order[position]
             let action = chosen[slot].action
-            let node = tree.nextActions.len
-            tree.nextActions.add(action)
-            tree.nextEvents.add(node+1)
+            let node = tree.actionCount
+            tree.nextActions[node] = action
+            inc tree.actionCount
+            tree.nextEvents[tree.eventCount] = node+1
+            inc tree.eventCount
             if slot == best: newSaved = node
             tree.trace.add(action)
             skipTourBoardForward(tree.state, action)
@@ -387,14 +399,36 @@ when not declared SkipTourBeamCoreModule:
             frontier.currentHash = chosen[slot].key
             skipTourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
             tree.state.expand(frontier)
-            tree.nextEvents.add(-node-1)
+            tree.nextEvents[tree.eventCount] = -node-1
+            inc tree.eventCount
             dec remaining
             # ID列は次世代の最初の移動でしか使わないため、最後の現在地だけ保存する。
             if remaining == 0:
                 tree.traceIds.setLen(tree.trace.len)
-                for i in 0..<tree.prefix.len: tree.traceIds[i] = -i-2
+                for i in tree.confirmedPrefix..<tree.prefix.len: tree.traceIds[i] = -i-2
+                tree.confirmedPrefix = tree.prefix.len
                 for i, old in tree.stack: tree.traceIds[tree.prefix.len+i] = tree.remap[old]
                 tree.traceIds[^1] = node
+
+    # 通常候補・完了候補・未選抜のグループ保留があるかを調べる。
+    template skipTourHasCandidates[A, S, K](selector: SkipTourSelector[A, S, K]): bool =
+        block:
+            let pendingSelector = selector
+            var found = pendingSelector.hasFinished or pendingSelector.candidates.len > 0
+            if not found:
+                for bucket in pendingSelector.buckets:
+                    if bucket.len > 0:
+                        found = true
+                        break
+            found
+
+    # 空世代の省略回数が奇数なら、入退場イベントを反転して巡回順だけを合わせる。
+    proc skipTourReverse[T, A](tree: var SkipTourTree[T, A]) =
+        for i in 0..<(tree.events.len shr 1):
+            let other = tree.events.high-i
+            let event = tree.events[i]
+            tree.events[i] = -tree.events[other]
+            tree.events[other] = -event
 
     # 将来候補が参照する親が残っているかを調べる。
     proc skipTourHasPending[A, S, K](frontier: SkipTourBeamFrontier[A, S, K]): bool =
@@ -432,8 +466,10 @@ when not declared SkipTourBeamCoreModule:
             let node = tree.events[i]-1
             if tree.traceIds[oldPrefix+i] != node: break
             tree.traceIds[oldPrefix+i] = tree.remap[node]
-        tree.nextActions.setLen(0)
-        tree.nextEvents.setLen(0)
+        tree.nextActions.setLen(tree.actions.len+chosen.len)
+        tree.nextEvents.setLen(tree.events.len+2*chosen.len)
+        tree.actionCount = 0
+        tree.eventCount = 0
         tree.stack.setLen(0)
         # filteredは、この経路の開いている新しい辺番号のスタックとして再利用する。
         tree.filtered.setLen(0)
@@ -444,14 +480,17 @@ when not declared SkipTourBeamCoreModule:
         var remaining = chosen.len
         template expandParent(parent: int) =
             for i in countdown(tree.filtered.high, commonKept):
-                tree.nextEvents.add(-tree.filtered[i]-1)
+                tree.nextEvents[tree.eventCount] = -tree.filtered[i]-1
+                inc tree.eventCount
             tree.filtered.setLen(commonKept)
             for i in commonKept..<tree.stack.len:
                 let old = tree.stack[i]
-                let node = tree.nextActions.len
+                let node = tree.actionCount
                 tree.remap[old] = node
-                tree.nextActions.add(tree.actions[old])
-                tree.nextEvents.add(node+1)
+                tree.nextActions[node] = tree.actions[old]
+                inc tree.actionCount
+                tree.nextEvents[tree.eventCount] = node+1
+                inc tree.eventCount
                 tree.filtered.add(node)
             commonKept = tree.stack.len
             tree.skipTourChildren(chosen, best, parent, frontier,
@@ -468,11 +507,14 @@ when not declared SkipTourBeamCoreModule:
                 commonDepth = min(commonDepth, tree.prefix.len+tree.stack.len)
         if tree.offsets[0] != 0: expandParent(-1)
         for i in countdown(tree.filtered.high, 0):
-            tree.nextEvents.add(-tree.filtered[i]-1)
+            tree.nextEvents[tree.eventCount] = -tree.filtered[i]-1
+            inc tree.eventCount
         when defined(debug): doAssert remaining == 0
         tree.saved = newSaved
         # 展開中に新しく予約された候補は、新しい親番号へ直すだけでよい。
         for selector in frontier.selectors.items: selector.skipTourRemap(tree.remap)
+        tree.nextActions.setLen(tree.actionCount)
+        tree.nextEvents.setLen(tree.eventCount)
         swap(tree.actions, tree.nextActions)
         swap(tree.events, tree.nextEvents)
 
@@ -544,6 +586,10 @@ when not declared SkipTourBeamCoreModule:
                 inc source
             tree.nextActions.setLen(offset+source-begin)
             tree.nextActions.skipTourCopyRange(offset, tree.actions, begin, source-begin)
+        tree.actionCount = tree.nextActions.len
+        tree.eventCount = 0
+        tree.nextActions.setLen(tree.actionCount+chosen.len)
+        tree.nextEvents.setLen(tree.filtered.len+2*chosen.len)
         # 接頭辞へ移った現在地の番号だけを先に確定する。残りは最初の移動まで旧番号。
         for id in tree.traceIds.mitems:
             if id >= 0 and tree.remap[id] < -1: id = tree.remap[id]
@@ -558,7 +604,8 @@ when not declared SkipTourBeamCoreModule:
             if event > 0:
                 let old = event-1
                 let node = tree.remap[old]
-                tree.nextEvents.add(node+1)
+                tree.nextEvents[tree.eventCount] = node+1
+                inc tree.eventCount
                 tree.stack.add(old)
             else:
                 let old = -event-1
@@ -566,7 +613,8 @@ when not declared SkipTourBeamCoreModule:
                     tree.skipTourChildren(chosen, best, old, frontier, firstMove, commonDepth, newSaved, remaining)
                 tree.stack.setLen(tree.stack.len-1)
                 commonDepth = min(commonDepth, tree.prefix.len+tree.stack.len)
-                tree.nextEvents.add(-tree.remap[old]-1)
+                tree.nextEvents[tree.eventCount] = -tree.remap[old]-1
+                inc tree.eventCount
         # 根の候補は末尾に置き、先頭での不要な根への復帰を避ける。
         for pos in countdown(first-1, 0):
             let old = tree.filtered[pos]-1
@@ -581,6 +629,8 @@ when not declared SkipTourBeamCoreModule:
                 if id >= 0: id = tree.remap[id]
         tree.saved = if chosen.len > 0: newSaved elif oldSaved < 0: -1 else: max(-1, tree.remap[oldSaved])
         for s in frontier.selectors.items: s.skipTourRemap(tree.remap)
+        tree.nextActions.setLen(tree.actionCount)
+        tree.nextEvents.setLen(tree.eventCount)
         swap(tree.actions, tree.nextActions)
         swap(tree.events, tree.nextEvents)
 
@@ -604,12 +654,32 @@ when not declared SkipTourBeamCoreModule:
         frontier.currentHash = tree.state.getHash()
         skipTourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, Action)
         tree.state.expand(frontier)
-        for turn in 1..maxTurns:
+        var turn = 1
+        var reversePending = false
+        while turn <= maxTurns:
             if frontier.selectors.len == 0:
                 result.status = beamExhausted
                 result.actions = tree.skipTourPath(tree.saved)
                 return
             let s = frontier.selectors.popFirst()
+            if not s.skipTourHasCandidates():
+                # 空の選抜器を再利用し、次の到着時刻までStateも経路も変更しない。
+                frontier.selectors.addLast(s)
+                var skipped = 1
+                while skipped < frontier.selectors.len and
+                        not frontier.selectors[skipped-1].skipTourHasCandidates():
+                    inc skipped
+                if skipped == frontier.selectors.len and
+                        not frontier.selectors[skipped-1].skipTourHasCandidates():
+                    result.status = beamExhausted
+                    result.actions = tree.skipTourPath(tree.saved)
+                    return
+                skipped = min(skipped, maxTurns-turn+1)
+                for i in 1..<skipped:
+                    frontier.selectors.addLast(frontier.selectors.popFirst())
+                if (skipped and 1) != 0: reversePending = not reversePending
+                turn += skipped
+                continue
             s.skipTourSelectGroups()
             result.selectedCandidates += int64(s.candidates.len + ord(s.hasFinished))
             var best = -1
@@ -624,6 +694,9 @@ when not declared SkipTourBeamCoreModule:
                     if s.hasFinished: result.status = beamFinished
                     return
             if turn == maxTurns: break
+            if reversePending:
+                tree.skipTourReverse()
+                reversePending = false
             frontier.remaining = maxTurns-turn
             if s.candidates.len > 0 and not frontier.skipTourHasPending():
                 tree.skipTourAdvanceSingle(s.candidates, best, frontier)
@@ -638,6 +711,7 @@ when not declared SkipTourBeamCoreModule:
                 result.status = beamExhausted
                 result.actions = tree.skipTourPath(tree.saved)
                 return
+            inc turn
         result.actions = tree.skipTourPath(tree.saved)
 
     # 問題の型を固定した探索関数を指定名で定義する。

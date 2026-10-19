@@ -67,6 +67,25 @@ proc moveBackward(s: var SearchState, action: Action) =
     dec s.problem.turn
     s.hash = s.hash xor action.hashDelta
 
+# 巡回では生値から復元できない実コスト・深さを更新し、Hash更新を省く。
+proc moveBoardForward(s: var SearchState, action: Action) =
+    let bits = action.transition
+    for j in 0..2:
+        s.problem.circles[j] = Point(uint16(s.problem.circles[j]) xor uint16((bits shr (15*j)) and 32767))
+    s.problem.cost += int((bits shr 45) and 1023)
+    inc s.problem.turn
+
+# 巡回で変更した魔法陣・実コスト・深さを戻す。
+proc moveBoardBackward(s: var SearchState, action: Action) =
+    let bits = action.transition
+    for j in 0..2:
+        s.problem.circles[j] = Point(uint16(s.problem.circles[j]) xor uint16((bits shr (15*j)) and 32767))
+    s.problem.cost -= int((bits shr 45) and 1023)
+    dec s.problem.turn
+
+# 評価値には先読みが含まれるため実コストへ代入せず、Hashだけを復元する。
+template loadLeaf(s: var SearchState, leafScore: int, leafKey: uint64) = s.hash = leafKey
+
 # 1区間を1ターンとして列挙し、StateをコピーせずActionだけを候補へ渡す。
 proc expand(s: var SearchState, frontier: var Frontier) =
     for id, order in orders:

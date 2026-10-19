@@ -31,6 +31,19 @@ when not declared TourBeamModule:
     proc moveBackward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveBackward")
 
+    # TODO: 巡回時に必要な盤面・履歴・isFinishedだけを更新する。
+    proc moveBoardForward*(self: var State, action: Action) =
+        self.moveForward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+
+    # TODO: moveBoardForwardの盤面・履歴・isFinishedを元に戻す。
+    proc moveBoardBackward*(self: var State, action: Action) =
+        self.moveBackward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+
+    # TODO: 保存値から評価用のStateを復元する。評価式が異なる場合は逆変換する。
+    template loadLeaf*(self: var State, leafScore: CostType, leafKey: HashType) =
+        self.score = leafScore
+        self.hash = leafKey
+
     # TODO: 合法なActionを列挙してself.pushCandidateで登録し、終了時のStateを元に戻す。
     proc expand*(self: var State, frontier: var Frontier) =
         # self.pushCandidate(frontier, action)

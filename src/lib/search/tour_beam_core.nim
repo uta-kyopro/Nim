@@ -6,6 +6,35 @@ import std/typetraits
 when not declared TourBeamCoreModule:
     const TourBeamCoreModule* = true
 
+    # 盤面専用フックがあれば使い、省略時は通常の適用処理を使う。
+    template tourBoardForward(state, action: untyped) =
+        mixin moveBoardForward, moveForward
+        when compiles(state.moveBoardForward(action)):
+            when not compiles(state.moveBoardBackward(action)):
+                {.error: "board-only transitions require both forward and backward hooks".}
+            state.moveBoardForward(action)
+        else:
+            state.moveForward(action)
+
+    # 盤面専用フックがあれば使い、省略時は通常の巻き戻し処理を使う。
+    template tourBoardBackward(state, action: untyped) =
+        mixin moveBoardBackward, moveBackward
+        when compiles(state.moveBoardBackward(action)):
+            when not compiles(state.moveBoardForward(action)):
+                {.error: "board-only transitions require both forward and backward hooks".}
+            state.moveBoardBackward(action)
+        else:
+            state.moveBackward(action)
+
+    # 展開直前に葉の生値を復元する。盤面専用フックを使う場合はloadLeafも実装する。
+    template tourLoadLeaf(state, leafScore, leafKey, ActionType: untyped) =
+        mixin loadLeaf, moveBoardForward, moveBoardBackward
+        when compiles(state.loadLeaf(leafScore, leafKey)):
+            state.loadLeaf(leafScore, leafKey)
+        elif compiles(state.moveBoardForward(default(ActionType))) or
+                compiles(state.moveBoardBackward(default(ActionType))):
+            {.error: "board-only transitions require loadLeaf".}
+
     type
         TourBeamStatus* = enum
             beamFinished, beamMaxTurns, beamExhausted
@@ -35,6 +64,8 @@ when not declared TourBeamCoreModule:
             groupLimit: int
             buckets: seq[seq[TourCandidate[Action, Score, Key]]]
         TourBeamFrontier*[Action, Score, Key] = object
+            currentScore*: Score # 展開中の葉の評価値。
+            currentHash*: Key # 展開中の葉のHash。
             selector: TourSelector[Action, Score, Key]
             currentParent, remaining: int
         TourTree[State, Action] = object
@@ -141,6 +172,15 @@ when not declared TourBeamCoreModule:
             s.worst[p] = s.tourWorst(s.worst[left], s.worst[left or 1])
             p = p shr 1
 
+    # 同一キーの改善は、変更スロットが更新前の最悪でなくなった階層から上を省く。
+    proc tourImproveDuplicate[A, S, K](s: TourSelector[A, S, K], index: int) =
+        var p = (s.size+index) shr 1
+        while p > 0:
+            if s.worst[p] != index: break
+            let left = p shl 1
+            s.worst[p] = s.tourWorst(s.worst[left], s.worst[left or 1])
+            p = p shr 1
+
     # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
     proc tourPush[A, S, K](s: TourSelector[A, S, K],
         candidate: TourCandidate[A, S, K], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
@@ -163,7 +203,7 @@ when not declared TourBeamCoreModule:
         if old >= 0 and s.candidates[old].key == candidate.key:
             if not tourBetter(candidate.score, s.candidates[old].score, s.minimize): return false
             s.candidates[old] = candidate
-            if full: s.tourUpdate(old)
+            if full: s.tourImproveDuplicate(old)
         elif full:
             let index = s.worst[1]
             s.candidates[index] = candidate
@@ -305,7 +345,7 @@ when not declared TourBeamCoreModule:
             for j in parent..<previous:
                 common = max(common, tree.leaves[j+1]-tree.leaves[j])
             for i in countdown(depth+applied-1, depth-common):
-                tree.state.moveBackward(tree.trace[i])
+                tourBoardBackward(tree.state, tree.trace[i])
             applied = 1
             let appended = tree.nextTour.len
             tree.nextTour.setLen(appended+common+1)
@@ -317,9 +357,12 @@ when not declared TourBeamCoreModule:
                     tree.trace.tourCopyRange(depth-rank, tree.tour, tree.leaves[j], rank-progress)
                     progress = rank
             tree.trace[depth] = candidates[slot].action
-            for i in depth-common..depth: tree.state.moveForward(tree.trace[i])
+            for i in depth-common..depth: tourBoardForward(tree.state, tree.trace[i])
             frontier.currentParent = tree.nextLeaves.len
             tree.expandedLeaves[slot] = tree.nextLeaves.len
+            frontier.currentScore = candidates[slot].score
+            frontier.currentHash = candidates[slot].key
+            tourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, A)
             tree.state.expand(frontier)
             tree.nextLeaves.add(tree.nextTour.len)
             previous = parent
@@ -335,7 +378,7 @@ when not declared TourBeamCoreModule:
     proc runTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
             groupCount = 0): TourBeamResult[Action, Score] =
-        mixin evaluate, expand
+        mixin evaluate, expand, getHash
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
         var frontier = initTourBeamFrontier[Action, Score, Key](beamWidth, minimize, groupLimit, groupCount)
@@ -349,6 +392,9 @@ when not declared TourBeamCoreModule:
         for turn in 1..maxTurns:
             frontier.remaining = maxTurns-turn+1
             if turn == 1:
+                frontier.currentScore = result.score
+                frontier.currentHash = tree.state.getHash()
+                tourLoadLeaf(tree.state, frontier.currentScore, frontier.currentHash, Action)
                 tree.state.expand(frontier)
             else:
                 tree.tourExpand(current, frontier)
