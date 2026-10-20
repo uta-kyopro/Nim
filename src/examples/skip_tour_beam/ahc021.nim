@@ -11,7 +11,7 @@ const
     AhcBeamWidth {.intdefine.} = 1024
 
 type
-    HashType = int
+    HashType = uint64
     CostType = int
     Action = int # 6座標を8bitずつ格納（64bit環境用）
     Stack[T] = object
@@ -37,11 +37,11 @@ proc pop[T](s: var Stack[T]): T =
 
 template getPyramidIndex(y, x: int): int =
     (y * (y+1) div 2 + x)
-const hashMask = ((1 shl 23)-1) shl 9
+const hashMask = ((1'u64 shl 23)-1) shl 9
 template updateTargetPosition(hash: HashType, y, x: int): HashType =
-    ((hash and hashMask) or getPyramidIndex(y, x))
+    ((hash and hashMask) or uint64(getPyramidIndex(y, x)))
 proc updateSortedPosition(hash: HashType, y, x: int): HashType =
-    var zobristHash = getPyramidIndex(y, x)
+    var zobristHash = uint64(getPyramidIndex(y, x))
     zobristHash = zobristHash or 0x200    # 512 (10bit)
     zobristHash *= zobristHash
     zobristHash *= zobristHash
@@ -169,7 +169,7 @@ proc moveBoardBackward(self: var State, action: Action) =
     self.isFinished = self.targetBall == M
 
 # 保存済みの評価値・Hashを展開直前に復元する。
-template loadLeaf(self: var State, score: int, key: int) =
+template loadLeaf(self: var State, score: int, key: HashType) =
     self.potential = score + targetCoefficient*self.targetBall
     self.hash = key
 

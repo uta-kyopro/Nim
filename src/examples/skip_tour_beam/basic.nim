@@ -13,7 +13,7 @@ type
         isFinished: bool
 
 template evaluate(s: State): int = s.score
-proc getHash(s: State): int = s.position
+proc getHash(s: State): uint64 = uint64(s.position)
 proc moveForward(s: var State, action: Action) =
     s.position += action
     s.score -= action
@@ -42,13 +42,13 @@ template loadLeaf(s: var State, leaf: LeafData) =
     s.score = leaf.score
     s.moves = leaf.moves
 
-proc expand(s: var State, frontier: var SkipTourBeamFrontier[Action, int, int, LeafData]) =
+proc expand(s: var State, frontier: var SkipTourBeamFrontier[Action, int, uint64, LeafData]) =
     doAssert s.moves == frontier.currentLeaf.moves
     for action in [1, 2]:
         if s.position + action > s.target: continue
         s.pushCandidate(frontier, action, step = action)
 
-defineSkipTourBeam(skipTourBeam, State, Action, int, int, LeafData)
+defineSkipTourBeam(skipTourBeam, State, Action, int, uint64, LeafData)
 
 when isMainModule:
     let initial = State(position: 0, target: 10, score: 10)

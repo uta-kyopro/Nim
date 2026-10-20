@@ -3,7 +3,11 @@
 [編集用テンプレート](../src/lib/search/skip_tour_beam.nim) / [探索エンジン](../src/lib/search/skip_tour_beam_core.nim) / [基本例](../src/examples/skip_tour_beam/basic.nim) / [AHC021例](../src/examples/skip_tour_beam/ahc021.nim)
 
 `skipTourBeam`は、世代スキップを扱う独立した差分更新ビームサーチ。
-1ターン遷移専用の[tourBeam](tour_beam.md)は変更せず、親・兄弟リンク型の[skipBeam](skip_beam.md)とも独立したコードを持つ。
+1ターン遷移専用の[tourBeam](tour_beam.md)とは、経路管理・巡回・探索ループを分けて持つ。
+候補型・Hash表・セグ木選抜・グループ選抜・葉情報復元・経路コピーは
+[共通実装](../src/lib/search/tour_beam_common.nim)を両coreからincludeする。
+skipTour専用の遅延確保はコンパイル時に切り替え、実行時の方式判定は増やさない。
+親・兄弟リンク型の[skipBeam](skip_beam.md)には依存せず、ユーザーのAPIも変わらない。
 固定ビーム幅で動作し、時間計測・時間による打ち切り・可変幅は持たない。
 
 ## 方式
@@ -67,9 +71,12 @@ for action in answer.actions:
 
 `step`は正の消費世代数。上限を超える候補は登録しない。世代ごとの選抜器で独立にHash重複を除き、同じHashなら良い評価の候補へ置き換えられる。
 親は展開中の位置から自動設定する。Hashには将来の遷移に影響する情報を反映する。整数Hashは再ハッシュせず使用するため、差分ZobristHashを推奨する。
+`Key`には`uint64`を指定する。
 
 `groupLimit > 0`では`beamWidth`による全体上限の代わりに、各グループ最大`groupLimit`件を選ぶ。
 `groupCount`はグループ数。ID順に安定ソート・Hash重複除去を行い、先のグループを優先する。
+重複除去には既存の配列Hash表を再利用し、使用済みビットだけを消去する。
+`uint64`のZobristHashは再ハッシュせず使用し、0も有効なキーとして扱う。
 
 ## 任意の葉情報
 

@@ -12,7 +12,7 @@ type
 # 目標位置までの残り距離を最小化する。
 template evaluate(s: State): int = s.score
 # 同じ位置を同一状態として扱う。
-template getHash(s: State): int = s.position
+template getHash(s: State): uint64 = uint64(s.position)
 # TODO: 実問題ではActionを適用し、評価値やHashも差分更新する。
 proc moveForward(s: var State, action: Action) =
     s.position += action
@@ -35,13 +35,13 @@ template loadLeaf(s: var State, leaf: LeafData) =
     s.score = leaf.score
     s.moves = leaf.moves
 # TODO: 合法な1ターン遷移を列挙し、仮適用・評価・巻き戻しをヘルパーに任せる。
-proc expand(s: var State, frontier: var TourBeamFrontier[Action, int, int, LeafData]) =
+proc expand(s: var State, frontier: var TourBeamFrontier[Action, int, uint64, LeafData]) =
     doAssert s.moves == frontier.currentLeaf.moves
     for action in [1, 2]:
         if s.position+action <= s.target:
             s.pushCandidate(frontier, action)
 
-defineTourBeam(tourBeam, State, Action, int, int, LeafData)
+defineTourBeam(tourBeam, State, Action, int, uint64, LeafData)
 
 when isMainModule:
     let initial = State(target: 10, score: 10)

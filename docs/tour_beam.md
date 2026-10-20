@@ -34,6 +34,7 @@ echo answer.actions
 ```
 
 汎用の入口は`runTourBeam[State, Action, Score, Key]`。
+`Key`には`uint64`を指定する。
 フロンティアは`TourBeamFrontier[Action, Score, Key]`、結果は`TourBeamResult[Action, Score]`。
 編集用テンプレートは型を固定済みなので、そのまま`tourBeam(initial, ...)`を呼ぶ。
 
@@ -46,7 +47,12 @@ echo answer.actions
 | `groupCount` | `0` | グループ数。IDは`0..<groupCount` |
 
 時間計測・可変幅・`step`は持たない。複数ターン後へ飛ぶ遷移には[skipTourBeam](skip_tour_beam.md)を使う。
-coreは`header.nim`を読み込むが、通常ビームやskipBeamには依存しない。
+coreは`header.nim`を読み込み、候補型・Hash表・セグ木選抜・グループ選抜・葉情報復元・
+経路コピーを[共通実装](../src/lib/search/tour_beam_common.nim)からincludeする。
+この共通部分はskipTourBeamでも使う。経路配列による巡回と探索ループは各coreに持たせ、
+通常ビームやskipBeamには依存しない。ユーザーのimport先・型・コールバックは変わらない。
+グループ選抜の重複除去も既存の配列Hash表を再利用し、各層では使用済みビットだけを消去する。
+`uint64`のZobristHashは再ハッシュせず使用し、0も有効なキーとして扱う。
 
 ## 葉の評価値・Hashと盤面専用巡回
 

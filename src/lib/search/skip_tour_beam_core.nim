@@ -1,46 +1,10 @@
 include ../header
-import std/typetraits
+include ./tour_beam_common
 
 ## オイラーツアー配列で経路を保持する世代スキップ対応ビームサーチ。
 ## Stateは1つだけ保持し、候補ごとのコピーや親・兄弟リンクは使わない。
 when not declared SkipTourBeamCoreModule:
     const SkipTourBeamCoreModule* = true
-
-    # 盤面専用フックがあれば使い、省略時は通常の適用処理を使う。
-    template skipTourBoardForward(state, action: untyped) =
-        mixin moveBoardForward, moveForward
-        when compiles(state.moveBoardForward(action)):
-            when not compiles(state.moveBoardBackward(action)):
-                {.error: "board-only transitions require both forward and backward hooks".}
-            state.moveBoardForward(action)
-        else:
-            state.moveForward(action)
-
-    # 盤面専用フックがあれば使い、省略時は通常の巻き戻し処理を使う。
-    template skipTourBoardBackward(state, action: untyped) =
-        mixin moveBoardBackward, moveBackward
-        when compiles(state.moveBoardBackward(action)):
-            when not compiles(state.moveBoardForward(action)):
-                {.error: "board-only transitions require both forward and backward hooks".}
-            state.moveBoardBackward(action)
-        else:
-            state.moveBackward(action)
-
-    # 任意の葉情報、または従来の評価値・Hashを展開直前に復元する。
-    template skipTourLoadLeaf(state, frontier, ActionType: untyped) =
-        mixin loadLeaf, moveBoardForward, moveBoardBackward
-        when compiles(frontier.currentLeaf):
-            when compiles(state.loadLeaf(frontier.currentLeaf)):
-                state.loadLeaf(frontier.currentLeaf)
-            elif compiles(state.moveBoardForward(default(ActionType))) or
-                    compiles(state.moveBoardBackward(default(ActionType))):
-                {.error: "board-only transitions require loadLeaf(state, leaf)".}
-        else:
-            when compiles(state.loadLeaf(frontier.currentScore, frontier.currentHash)):
-                state.loadLeaf(frontier.currentScore, frontier.currentHash)
-            elif compiles(state.moveBoardForward(default(ActionType))) or
-                    compiles(state.moveBoardBackward(default(ActionType))):
-                {.error: "board-only transitions require loadLeaf".}
 
     type
         SkipTourBeamStatus* = enum
@@ -51,27 +15,8 @@ when not declared SkipTourBeamCoreModule:
             turns*: int
             status*: SkipTourBeamStatus
             selectedCandidates*: int64
-        SkipTourCandidate[Action, Score, Key, Leaf] = object
-            action: Action
-            score: Score
-            key: Key
-            parent: int
-            when Leaf isnot void:
-                leaf: Leaf
-        SkipTourHashMap[Key] = object
-            keys: seq[Key]
-            values: seq[int]
-            valid: seq[uint64]
-            used: int
-        SkipTourSelector[Action, Score, Key, Leaf] = ref object
-            width, size: int
-            minimize, hasFinished: bool
-            candidates: seq[SkipTourCandidate[Action, Score, Key, Leaf]]
-            indices: SkipTourHashMap[Key]
-            worst: seq[int]
-            finished: SkipTourCandidate[Action, Score, Key, Leaf]
-            groupLimit, groupCount: int
-            buckets: seq[seq[SkipTourCandidate[Action, Score, Key, Leaf]]]
+        SkipTourCandidate[A, S, K, L] = TourCommonCandidate[A, S, K, L]
+        SkipTourSelector[A, S, K, L] = TourCommonSelector[A, S, K, L, true]
         SkipTourBeamFrontier*[Action, Score, Key; Leaf = void] = object
             currentScore*: Score # 展開中の葉に保存されていた評価値。
             when Leaf isnot void:
@@ -92,171 +37,6 @@ when not declared SkipTourBeamCoreModule:
             saved: int
             confirmedPrefix: int # Stateと履歴IDの一致を確認済みの確定接頭辞長。
             actionCount, eventCount: int
-
-    # Stateに実在するboolフィールドだけを読み、旧判定関数形式は受け付けない。
-    template skipTourFinishedField(state: typed): bool =
-        const hasFinishedField = block:
-            var found = false
-            var probe: typeof(state)
-            for name, field in fieldPairs(probe):
-                when name == "isFinished":
-                    when field is bool: found = true
-            found
-        when not hasFinishedField:
-            {.error: "State must contain an isFinished: bool field".}
-        else:
-            state.isFinished
-
-    # ビーム幅に応じた容量の重複除去用Hash表を確保する。
-    proc initSkipTourHashMap[K](width: int): SkipTourHashMap[K] =
-        var capacity = 16
-        while capacity < width * 16: capacity *= 2
-        result.keys = newSeq[K](capacity)
-        result.values = newSeq[int](capacity)
-        result.valid = newSeq[uint64]((capacity + 63) div 64)
-
-    # 確保済みの配列を再利用し、Hash表の登録情報だけを消去する。
-    proc clear[K](m: var SkipTourHashMap[K]) =
-        for word in m.valid.mitems: word = 0
-        m.used = 0
-
-    # キーを線形探索し、一致したスロットまたは登録先の空きスロットを返す。
-    proc getIndex[K](m: SkipTourHashMap[K], key: K): tuple[found: bool, slot: int] =
-        let mask = m.keys.len - 1
-        when K is SomeInteger:
-            when K is SomeSignedInt:
-                let bits = cast[uint64](int64(key))
-            else:
-                let bits = uint64(key)
-            var i = int(bits and uint64(mask)) # 整数キーを再ハッシュしない。
-        else:
-            var i = int(hash(key)) and mask
-        while (m.valid[i shr 6] and (1'u64 shl (i and 63))) != 0:
-            if m.keys[i] == key: return (true, i)
-            i = (i + 1) and mask
-        (false, i)
-
-    # 指定スロットにキーと候補インデックスを登録する。
-    proc set[K](m: var SkipTourHashMap[K], slot: int, key: K, value: int) =
-        let bit = 1'u64 shl (slot and 63)
-        if (m.valid[slot shr 6] and bit) == 0:
-            m.valid[slot shr 6] = m.valid[slot shr 6] or bit
-            inc m.used
-        m.keys[slot] = key
-        m.values[slot] = value
-
-    # 採用中の候補だけでHash表を作り直し、追い出された候補のキーを除く。
-    proc skipTourRebuildHash[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
-        s.indices.clear()
-        for i, c in s.candidates:
-            let (_, slot) = s.indices.getIndex(c.key)
-            s.indices.set(slot, c.key, i)
-
-    # 評価方向に従い、aがbより良いか判定する。
-    template skipTourBetter[S](a, b: S, minimize: bool): bool =
-        block:
-            let first = a
-            let second = b
-            let isMinimum = minimize
-            if isMinimum: first < second else: second < first
-
-    # 有効な2候補のうち評価の悪いindexを返す（同点は左を優先）。
-    template skipTourWorst[A, S, K, L](s: SkipTourSelector[A, S, K, L], a, b: int): int =
-        block:
-            let selector = s
-            let first = a
-            let second = b
-            if skipTourBetter(selector.candidates[first].score, selector.candidates[second].score,
-                selector.minimize): second
-            else: first
-
-    # 幅到達時に一括構築し、余った葉は末尾候補を参照させて無効値チェックを省く。
-    proc skipTourBuild[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
-        s.size = 1
-        while s.size < s.width: s.size *= 2
-        s.worst.setLen(s.size * 2)
-        for i in 0..<s.width: s.worst[s.size+i] = i
-        # 末尾候補だけの部分木は、候補の評価値が変わっても保持するindexが変わらない。
-        for i in s.width..<s.size: s.worst[s.size+i] = s.width-1
-        for i in countdown(s.size-1, 1):
-            let left = i shl 1
-            s.worst[i] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
-
-    # 指定候補の変更を反映し、セグ木の根まで最悪候補を更新する。
-    proc skipTourUpdate[A, S, K, L](s: SkipTourSelector[A, S, K, L], index: int) =
-        var p = (s.size + index) shr 1
-        while p > 0:
-            let left = p shl 1
-            s.worst[p] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
-            p = p shr 1
-
-    # 同一キーの改善は、変更スロットが更新前の最悪でなくなった階層から上を省く。
-    proc skipTourImproveDuplicate[A, S, K, L](s: SkipTourSelector[A, S, K, L], index: int) =
-        var p = (s.size+index) shr 1
-        while p > 0:
-            if s.worst[p] != index: break
-            let left = p shl 1
-            s.worst[p] = s.skipTourWorst(s.worst[left], s.worst[left or 1])
-            p = p shr 1
-
-    # 1つの到達ターンへ候補を登録し、通常選抜・グループ保留・完了候補を処理する。
-    proc skipTourPush[A, S, K, L](s: SkipTourSelector[A, S, K, L],
-        candidate: SkipTourCandidate[A, S, K, L], finished: bool, group: int, scoreChecked: static[bool] = false): bool =
-        if finished:
-            if not s.hasFinished:
-                s.hasFinished = true
-                s.finished = candidate
-                return true
-            return false
-        if s.groupLimit > 0:
-            if s.buckets.len == 0: s.buckets.setLen(s.groupCount)
-            s.buckets[group].add(candidate)
-            return true
-        if s.indices.keys.len == 0:
-            s.indices = initSkipTourHashMap[K](s.width)
-            s.candidates = newSeqOfCap[SkipTourCandidate[A, S, K, L]](s.width)
-        let full = s.candidates.len == s.width
-        when not scoreChecked:
-            if full and not skipTourBetter(candidate.score,
-                s.candidates[s.worst[1]].score, s.minimize): return false
-        if s.indices.used >= s.indices.keys.len * 7 div 10: s.skipTourRebuildHash()
-        let (found, slot) = s.indices.getIndex(candidate.key)
-        let old = if found: s.indices.values[slot] else: -1
-        if old >= 0 and s.candidates[old].key == candidate.key:
-            if not skipTourBetter(candidate.score, s.candidates[old].score, s.minimize): return false
-            s.candidates[old] = candidate
-            if full: s.skipTourImproveDuplicate(old)
-        elif full:
-            let index = s.worst[1]
-            s.candidates[index] = candidate
-            s.indices.set(slot, candidate.key, index)
-            s.skipTourUpdate(index)
-        else:
-            s.indices.set(slot, candidate.key, s.candidates.len)
-            s.candidates.add(candidate)
-            if s.candidates.len == s.width: s.skipTourBuild()
-        true
-
-    # グループID順に重複を除去し、各グループの上位候補を確定する。
-    proc skipTourSelectGroups[A, S, K, L](s: SkipTourSelector[A, S, K, L]) =
-        if s.groupLimit <= 0: return
-        var seen = initHashSet[K](0)
-        for bucket in s.buckets.mitems:
-            # std/algorithm.sort is stable: equal scores retain registration order.
-            let minimize = s.minimize
-            bucket.sort(proc(a, b: SkipTourCandidate[A, S, K, L]): int =
-                if skipTourBetter(a.score, b.score, minimize): -1
-                elif skipTourBetter(b.score, a.score, minimize): 1
-                else: 0)
-            var kept = 0
-            for candidate in bucket:
-                if candidate.key in seen: continue
-                seen.incl(candidate.key)
-                s.candidates.add(candidate)
-                inc kept
-                if kept == s.groupLimit: break
-            bucket.setLen(0)
-
 
     # 到達世代ごとの選抜器を作る。確保した領域は世代を進めても再利用する。
     proc skipTourSelector[A, S, K, L](f: SkipTourBeamFrontier[A, S, K, L]): SkipTourSelector[A, S, K, L] =
@@ -298,13 +78,13 @@ when not declared SkipTourBeamCoreModule:
         let s = frontier.selectors[step-1]
         if finished: return not s.hasFinished
         s.groupLimit > 0 or s.candidates.len < s.width or
-            skipTourBetter(score, s.candidates[s.worst[1]].score, s.minimize)
+            tourCommonBetter(score, s.candidates[s.worst[1]].score, s.minimize)
 
     # 選抜済みの評価値と現在の親を指定step先へ登録する。
     proc skipTourRegister[A, S, K, L](f: var SkipTourBeamFrontier[A, S, K, L],
             candidate: SkipTourCandidate[A, S, K, L], step: int, finished: bool, group: int): bool =
         while f.selectors.len < step: f.selectors.addLast(f.skipTourSelector())
-        f.selectors[step-1].skipTourPush(candidate, finished, group, true)
+        f.selectors[step-1].tourCommonPush(candidate, finished, group, true)
 
     # 評価済み候補と遷移後の任意の保存情報を、指定step先へ登録する。
     proc push*[A, S, K, L](frontier: var SkipTourBeamFrontier[A, S, K, L], action: A,
@@ -329,7 +109,7 @@ when not declared SkipTourBeamCoreModule:
         if step > frontier.remaining: return false
         self.moveForward(action)
         let score = self.evaluate()
-        let finished = skipTourFinishedField(self)
+        let finished = tourCommonFinishedField(self)
         if not frontier.canImprove(score, step, finished, group):
             self.moveBackward(action)
             return false
@@ -340,18 +120,10 @@ when not declared SkipTourBeamCoreModule:
         self.moveBackward(action)
         frontier.skipTourRegister(candidate, step, finished, group)
 
-    # 重ならないAction区間を一括コピーし、参照管理が必要な型は通常代入する。
-    proc skipTourCopyRange[A](dest: var seq[A], offset: int, source: seq[A], first, count: int) =
-        if count <= 0: return
-        when supportsCopyMem(A):
-            copyMem(addr dest[offset], unsafeAddr source[first], count*sizeof(A))
-        else:
-            for i in 0..<count: dest[offset+i] = source[first+i]
-
     # 共通接頭辞とツアー中のスタックから、指定した親までのAction列を復元する。
     proc skipTourPath[T, A](tree: SkipTourTree[T, A], parent: int): seq[A] =
         result = newSeq[A](tree.prefix.len)
-        result.skipTourCopyRange(0, tree.prefix, 0, tree.prefix.len)
+        result.tourCommonCopyRange(0, tree.prefix, 0, tree.prefix.len)
         if parent < 0: return
         for event in tree.events:
             if event > 0:
@@ -359,11 +131,6 @@ when not declared SkipTourBeamCoreModule:
                 if event-1 == parent: return
             else:
                 result.setLen(result.len-1)
-
-    # 世代終了時の最良候補を走査する。同点は小さいスロットを優先する。
-    proc skipTourBest[A, S, K, L](candidates: seq[SkipTourCandidate[A, S, K, L]], minimize: bool): int =
-        for i in 1..<candidates.len:
-            if skipTourBetter(candidates[i].score, candidates[result].score, minimize): result = i
 
     # 選抜器が参照する旧親を、新しいツアー配列の位置へ置き換える。
     proc skipTourRemap[A, S, K, L](s: SkipTourSelector[A, S, K, L], remap: seq[int]) =
@@ -389,15 +156,15 @@ when not declared SkipTourBeamCoreModule:
                 if tree.traceIds[common] != id: break
                 inc common
             firstMove = false
-        for i in countdown(tree.trace.high, common): skipTourBoardBackward(tree.state, tree.trace[i])
+        for i in countdown(tree.trace.high, common): tourCommonBoardBackward(tree.state, tree.trace[i])
         tree.trace.setLen(depth)
         if common < tree.prefix.len:
-            tree.trace.skipTourCopyRange(common, tree.prefix, common, tree.prefix.len-common)
-            for i in common..<tree.prefix.len: skipTourBoardForward(tree.state, tree.trace[i])
+            tree.trace.tourCommonCopyRange(common, tree.prefix, common, tree.prefix.len-common)
+            for i in common..<tree.prefix.len: tourCommonBoardForward(tree.state, tree.trace[i])
         for i in max(common, tree.prefix.len)..<depth:
             let node = tree.stack[i-tree.prefix.len]
             tree.trace[i] = tree.actions[node]
-            skipTourBoardForward(tree.state, tree.trace[i])
+            tourCommonBoardForward(tree.state, tree.trace[i])
         commonDepth = depth
 
     # 親ごとの候補リストを逆順の先頭追加で作り、スロット昇順を保つ。
@@ -430,12 +197,12 @@ when not declared SkipTourBeamCoreModule:
             inc tree.eventCount
             if slot == best: newSaved = node
             tree.trace.add(action)
-            skipTourBoardForward(tree.state, action)
+            tourCommonBoardForward(tree.state, action)
             frontier.currentParent = -node-2
             frontier.currentScore = chosen[slot].score
             frontier.currentHash = chosen[slot].key
             when L isnot void: frontier.currentLeaf = chosen[slot].leaf
-            skipTourLoadLeaf(tree.state, frontier, A)
+            tourCommonLoadLeaf(tree.state, frontier, A)
             tree.state.expand(frontier)
             tree.nextEvents[tree.eventCount] = -node-1
             inc tree.eventCount
@@ -556,10 +323,9 @@ when not declared SkipTourBeamCoreModule:
         tree.needed.setLen(tree.actions.len)
         tree.direct.setLen(tree.actions.len)
         tree.remap.setLen(tree.actions.len)
-        for i in 0..<tree.actions.len:
-            tree.needed[i] = false
-            tree.direct[i] = false
-            tree.remap[i] = -1
+        tree.needed.fill(false)
+        tree.direct.fill(false)
+        tree.remap.fill(-1)
         var rootNeeded = false
         template mark(parent: int) =
             if parent < 0: rootNeeded = true
@@ -609,7 +375,7 @@ when not declared SkipTourBeamCoreModule:
                 tree.remap[source] = offset+source-begin
                 inc source
             tree.nextActions.setLen(offset+source-begin)
-            tree.nextActions.skipTourCopyRange(offset, tree.actions, begin, source-begin)
+            tree.nextActions.tourCommonCopyRange(offset, tree.actions, begin, source-begin)
         tree.actionCount = tree.nextActions.len
         tree.eventCount = 0
         tree.nextActions.setLen(tree.actionCount+chosen.len)
@@ -669,7 +435,7 @@ when not declared SkipTourBeamCoreModule:
         var tree = SkipTourTree[State, Action](state: initial, saved: -1)
         result.score = tree.state.evaluate()
         result.status = beamMaxTurns
-        if skipTourFinishedField(tree.state):
+        if tourCommonFinishedField(tree.state):
             result.status = beamFinished
             return
         if maxTurns == 0: return
@@ -677,7 +443,7 @@ when not declared SkipTourBeamCoreModule:
         frontier.currentScore = result.score
         frontier.currentHash = tree.state.getHash()
         when Leaf isnot void: frontier.currentLeaf = tree.state.getLeaf()
-        skipTourLoadLeaf(tree.state, frontier, Action)
+        tourCommonLoadLeaf(tree.state, frontier, Action)
         tree.state.expand(frontier)
         var turn = 1
         var reversePending = false
@@ -705,11 +471,11 @@ when not declared SkipTourBeamCoreModule:
                 if (skipped and 1) != 0: reversePending = not reversePending
                 turn += skipped
                 continue
-            s.skipTourSelectGroups()
+            s.tourCommonSelectGroups()
             result.selectedCandidates += int64(s.candidates.len + ord(s.hasFinished))
             var best = -1
             if s.hasFinished or s.candidates.len > 0:
-                best = if s.hasFinished: -1 else: skipTourBest(s.candidates, minimize)
+                best = if s.hasFinished: -1 else: tourCommonBest(s.candidates, minimize)
                 let candidate = if s.hasFinished: s.finished else: s.candidates[best]
                 result.score = candidate.score
                 result.turns = turn
