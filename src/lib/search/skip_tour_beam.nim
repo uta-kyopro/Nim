@@ -26,21 +26,25 @@ when not declared SkipTourBeamModule:
     # TODO: 将来の遷移に影響する状態を反映したHashを返す（既定はself.hash）。
     template getHash*(self: State): HashType = self.hash
 
-    # TODO: isFinishedも更新し、actionを適用し、評価値・Hashと差分計算用の情報も更新する。
+    # 候補の試算：moveForward → evaluate/getHash/getLeaf → moveBackward。
+    # 採用候補への移動：共通祖先までmoveBoardBackward → moveBoardForward → loadLeaf → expand。
+    # TODO: 候補の試算と最終Action列の再生に使う。盤面・評価値・Hash・補助情報・isFinishedを全て更新する。
     proc moveForward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveForward")
 
-    # TODO: isFinishedも復元し、対応するmoveForwardの変更を、評価値・Hashも含めて完全に戻す。
+    # TODO: 候補の試算を取り消し、moveForwardが変更した全情報を元に戻す。
     proc moveBackward*(self: var State, action: Action) =
         raise newException(ValueError, "implement moveBackward")
 
-    # TODO: 巡回時に必要な盤面・履歴・isFinishedだけを更新する。
+    # Board付きの2関数は任意。どちらも定義しなければ通常のmoveForward/moveBackwardで移動する。
+    # TODO: 採用候補へ移動するため、盤面・巻き戻し履歴・isFinishedを更新する。
+    # loadLeafで上書きする評価値・Hash・補助情報の更新は省略できる。省略した値を巡回処理から参照しない。
     proc moveBoardForward*(self: var State, action: Action) =
-        self.moveForward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+        self.moveForward(action) # まずはこのままでよい。高速化する場合だけ保存値の更新を省く。
 
-    # TODO: moveBoardForwardの盤面・履歴・isFinishedを元に戻す。
+    # TODO: 採用候補間を戻るため、moveBoardForwardが更新する盤面・履歴・isFinishedを元に戻す。
     proc moveBoardBackward*(self: var State, action: Action) =
-        self.moveBackward(action) # TODO: 評価値・Hashの更新を除いた処理に置き換える。
+        self.moveBackward(action) # forward側と同じ保存値の更新を省く。
 
     # 葉への保存は巡回中の差分計算を省く一方、候補の保存・コピー量を増やす。
     # 軽い加減算は差分更新が速い場合もあるため、保存する情報は実測で判断する。

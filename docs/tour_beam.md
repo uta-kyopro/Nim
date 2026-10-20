@@ -50,6 +50,15 @@ coreは`header.nim`を読み込むが、通常ビームやskipBeamには依存�
 
 ## 葉の評価値・Hashと盤面専用巡回
 
+| 関数 | 呼ばれる場面 | 更新する情報 |
+| --- | --- | --- |
+| `moveForward` / `moveBackward` | `pushCandidate`で全候補を試算して戻す。Forwardは最終Action列の再生にも使う | 盤面・評価値・Hash・補助情報・終了フラグの全て |
+| `moveBoardForward` / `moveBoardBackward` | 選ばれた候補へ、共通祖先を経由して移動する | 盤面・巻き戻し履歴・終了フラグ。`loadLeaf`で復元する値の更新は省ける |
+
+候補の試算は「通常のForward → 評価・Hash・葉情報の取得 → 通常のBackward」。
+採用候補の展開は「Board付きで移動 → `loadLeaf`で保存値を上書き → `expand`」。
+まずはBoard付きも通常の遷移を呼ぶ実装でよい。Board付きの2関数を定義しない場合も通常の遷移で巡回する。
+
 採用候補の生値を保持し、`expand`直前に`frontier.currentScore`・
 `frontier.currentHash`へ渡す。初期値は`evaluate(initial)`・`getHash(initial)`。
 直接`frontier.push`する実装でも`getHash`を定義する。

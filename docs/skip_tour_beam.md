@@ -73,6 +73,13 @@ for action in answer.actions:
 
 ## 任意の葉情報
 
+`moveForward` / `moveBackward`は`pushCandidate`で候補を試算して戻す処理で、
+盤面・評価値・Hash・補助情報・終了フラグを全て更新・復元する。Forwardは最終Action列の再生にも使う。
+`moveBoardForward` / `moveBoardBackward`は、到着して選ばれた候補へ共通祖先経由で移動する処理。
+盤面・巻き戻し履歴・終了フラグは更新し、`loadLeaf`で復元する値の更新だけを省ける。
+候補への移動が終わると「`loadLeaf`で保存値を上書き → `expand`」の順で呼ばれる。
+まずはBoard付きも通常の遷移を呼ぶ実装でよい。Board付きの2関数を定義しない場合も通常の遷移で巡回する。
+
 `SkipTourBeamFrontier[Action, Score, Key, LeafData]`と
 `runSkipTourBeam[State, Action, Score, Key, LeafData]`で任意型の保存情報を追加できる。
 `defineSkipTourBeam(search, State, Action, Score, Key, LeafData)`も同じ指定に対応する。
