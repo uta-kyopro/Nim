@@ -1,6 +1,7 @@
 include ../../lib/header
 import ../../lib/search/tour_beam_core
 
+# 整数評価値は符号付き48bit範囲、通常のビーム幅は65,536以下にする。
 type
     Action = int
     LeafData = object
@@ -8,12 +9,13 @@ type
     State = object
         position, target, score, moves: int
         isFinished: bool # 固定5ターンの全候補を比較するためfalseのままにする。
+    Frontier = TourBeamFrontier[Action, int, uint64, LeafData]
 
 # 目標位置までの残り距離を最小化する。
 template evaluate(s: State): int = s.score
 # 同じ位置を同一状態として扱う。
 template getHash(s: State): uint64 = uint64(s.position)
-# TODO: 実問題ではActionを適用し、評価値やHashも差分更新する。
+# TODO: 候補の試算・最終再生用に、盤面・評価値・補助情報・終了状態を全て更新する。
 proc moveForward(s: var State, action: Action) =
     s.position += action
     s.score -= action
@@ -25,17 +27,18 @@ proc moveBackward(s: var State, action: Action) =
     dec s.moves
 
 # 巡回中は位置だけを更新し、固定ターン探索の完了フラグはfalseのままにする。
-proc moveBoardForward(s: var State, action: Action) = s.position += action
+template moveBoardForward(s: var State, action: Action) = s.position += action
 # 巡回中に変更した位置を戻す。
-proc moveBoardBackward(s: var State, action: Action) = s.position -= action
+template moveBoardBackward(s: var State, action: Action) = s.position -= action
 # 評価値に加え、Actionの個数も葉ごとに保存する。
 template getLeaf(s: State): LeafData = LeafData(score: s.score, moves: s.moves)
-# 巡回中は変更しない補助情報を、展開直前にまとめて復元する。
+# TODO: 巡回中に更新を省いた値を、展開直前に葉の保存値で上書きする。
+# 保存は差分計算を省く一方でコピー量を増やすため、実問題では軽い方を測って選ぶ。
 template loadLeaf(s: var State, leaf: LeafData) =
     s.score = leaf.score
     s.moves = leaf.moves
 # TODO: 合法な1ターン遷移を列挙し、仮適用・評価・巻き戻しをヘルパーに任せる。
-proc expand(s: var State, frontier: var TourBeamFrontier[Action, int, uint64, LeafData]) =
+proc expand(s: var State, frontier: var Frontier) =
     doAssert s.moves == frontier.currentLeaf.moves
     for action in [1, 2]:
         if s.position+action <= s.target:

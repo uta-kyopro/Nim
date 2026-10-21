@@ -5,14 +5,18 @@ include ../beam_search/ahc073_problem
 # AHC073の逆順区間遷移を、rhoo版の経路配列型ビームで使う例。
 # 問題固有の経路計算・評価・入力・出力は通常ビームのサンプルと共有する。
 type
+    # 選抜評価値には先読みが含まれるため、実コストは別の葉情報として保存する。
+    LeafData = object
+        cost: int
+        hash: uint64
     Action = object
         transition: uint64 # 魔法陣XOR差分45bit・コスト10bit・経路ID6bit。
         hashDelta: uint64
     SearchState = object
-        isFinished: bool
+        isFinished: bool # 指定ターン数まで探索し、最後の層で最良候補を選ぶためfalseのまま。
         problem: State
         hash: uint64
-    Frontier = TourBeamFrontier[Action, int, uint64]
+    Frontier = TourBeamFrontier[Action, int, uint64, LeafData] # 評価値は符号付き48bit範囲。
 
 # 多重集合の同じ位置の1個目・2個目・3個目に別のZobrist値を割り当てる。
 var zobrist: array[3, array[16385, uint64]]
@@ -40,7 +44,6 @@ proc circlesHash(circles: Circles): uint64 =
 template evaluate(s: SearchState): int = s.problem.evaluate()
 # 差分更新済みのZobristHashを返す。
 template getHash(s: SearchState): uint64 = s.hash
-# 最終層の全候補を比較する。
 
 # 遷移前後の魔法陣・コスト・経路IDを、巻き戻し可能な1つのActionにまとめる。
 proc makeAction(s: SearchState, route: Route, id: int): Action =
@@ -67,24 +70,27 @@ proc moveBackward(s: var SearchState, action: Action) =
     dec s.problem.turn
     s.hash = s.hash xor action.hashDelta
 
-# 巡回では生値から復元できない実コスト・深さを更新し、Hash更新を省く。
+# 採用候補への巡回では位置・深さだけを更新し、実コスト・HashはloadLeafに任せる。
 proc moveBoardForward(s: var SearchState, action: Action) =
     let bits = action.transition
     for j in 0..2:
         s.problem.circles[j] = Point(uint16(s.problem.circles[j]) xor uint16((bits shr (15*j)) and 32767))
-    s.problem.cost += int((bits shr 45) and 1023)
     inc s.problem.turn
 
-# 巡回で変更した魔法陣・実コスト・深さを戻す。
+# 巡回で変更した魔法陣・深さだけを戻す。
 proc moveBoardBackward(s: var SearchState, action: Action) =
     let bits = action.transition
     for j in 0..2:
         s.problem.circles[j] = Point(uint16(s.problem.circles[j]) xor uint16((bits shr (15*j)) and 32767))
-    s.problem.cost -= int((bits shr 45) and 1023)
     dec s.problem.turn
 
-# 評価値には先読みが含まれるため実コストへ代入せず、Hashだけを復元する。
-template loadLeaf(s: var SearchState, leafScore: int, leafKey: uint64) = s.hash = leafKey
+# 巡回時の差分計算と葉のコピー量のどちらが軽いかを測り、保存する情報を選ぶ。
+template getLeaf(s: SearchState): LeafData = LeafData(cost: s.problem.cost, hash: s.hash)
+
+# 展開直前に、選抜評価値とは別に保存した実コスト・Hashを上書きする。
+template loadLeaf(s: var SearchState, leaf: LeafData) =
+    s.problem.cost = leaf.cost
+    s.hash = leaf.hash
 
 # 1区間を1ターンとして列挙し、StateをコピーせずActionだけを候補へ渡す。
 proc expand(s: var SearchState, frontier: var Frontier) =
@@ -92,7 +98,7 @@ proc expand(s: var SearchState, frontier: var Frontier) =
         let route = makeRoute(s.problem, order)
         s.pushCandidate(frontier, s.makeAction(route, id))
 
-defineTourBeam(tourBeam, SearchState, Action, int, uint64)
+defineTourBeam(tourBeam, SearchState, Action, int, uint64, LeafData)
 
 # 復元済みのActionを1回だけ再生し、共通の出力処理へ経路IDと最終Stateを渡す。
 proc runSearch(initial: State, width, turns: int): Ahc073Answer =

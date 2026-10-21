@@ -6,7 +6,7 @@ when defined(debug): {.checks:on.}
 
 when not declared Importer:
     const Importer = true
-    import std/[os, bitops, macros, hashes,
+    import std/[os, bitops, macros, hashes, typetraits,
                 algorithm, sequtils, setutils, strformat, strutils,
                 deques, heapqueue, options, sets, tables,
                 monotimes, times, math, random, rationals]

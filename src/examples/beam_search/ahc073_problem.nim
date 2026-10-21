@@ -2,7 +2,7 @@
 
 const
     MaxGoals = 150
-    Ahc073BeamWidth {.intdefine.} = 64
+    Ahc073BeamWidth {.intdefine.} = 3000
     CostWeight = 200
     PredictionHorizon = 12
     PredictionWeights = block:

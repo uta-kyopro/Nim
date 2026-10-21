@@ -1,6 +1,9 @@
-import std/typetraits
+include ../header
 
-# 両coreがheader.nimの後にincludeする、非公開の共通型・選抜器・巡回補助処理。
+
+# -------------------------------------------------------------------
+# TourBeamCommonModule 1ターン遷移専用のビームサーチライブラリ(編集しない)
+# -------------------------------------------------------------------
 when not declared TourBeamCommonModule:
     const TourBeamCommonModule = true
 

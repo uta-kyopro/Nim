@@ -12,7 +12,10 @@ const
 
 type
     HashType = uint64
-    CostType = int
+    CostType = int # 選抜に渡す評価値は符号付き48bit範囲に収める。
+    LeafData = object
+        potential: CostType
+        hash: HashType
     Action = int # 6座標を8bitずつ格納（64bit環境用）
     Stack[T] = object
         len: int
@@ -25,7 +28,7 @@ type
         pos: array[M, (int, int)]
         targetBallHistory: Stack[int]
         hashHistory: Stack[HashType]
-    Frontier = SkipTourBeamFrontier[Action, CostType, HashType]
+    Frontier = SkipTourBeamFrontier[Action, CostType, HashType, LeafData]
 
 static: doAssert sizeof(int) == 8
 proc add[T](s: var Stack[T], value: T) =
@@ -168,72 +171,59 @@ proc moveBoardBackward(self: var State, action: Action) =
     self.targetBall = self.targetBallHistory.pop()
     self.isFinished = self.targetBall == M
 
-# 保存済みの評価値・Hashを展開直前に復元する。
-template loadLeaf(self: var State, score: int, key: HashType) =
-    self.potential = score + targetCoefficient*self.targetBall
-    self.hash = key
+# 巡回中に省いた補助評価・Hashを保存する。差分計算と葉のコピー量の軽い方を選ぶ。
+template getLeaf(self: State): LeafData =
+    LeafData(potential: self.potential, hash: self.hash)
+
+# 選抜評価値から逆算せず、展開直前に保存値を上書きする。
+template loadLeaf(self: var State, leaf: LeafData) =
+    self.potential = leaf.potential
+    self.hash = leaf.hash
 
 
-# 次の状態候補を全てselectorに追加する。
-proc expand(self:var State, parent: int, multiSelector:var Frontier) =
-    proc push2(self:var State, parent: int, multiSelector:var Frontier,
-        y1, x1, y2, x2: int) =
-        var action = initAction(y1, x1, y2, x2, N, N)
+# 現在の探索キーを返す。
+template getHash(s: State): HashType = s.hash
 
-        self.moveForward(action)
-        var hash = self.hash
-        var cost = self.evaluate()
-        var finished = (self.targetBall == M)
-        self.moveBackward(action)
+# TODO: 合法な1交換・2交換を列挙し、仮適用・評価・巻き戻しをヘルパーに任せる。
+proc expand(self: var State, frontier: var Frontier) =
+    # 1交換を1ターンとして登録し、仮適用・評価・巻き戻しはcoreに任せる。
+    template pushSwap(y1, x1, y2, x2: int) =
+        self.pushCandidate(frontier, initAction(y1, x1, y2, x2, N, N))
 
-        multiSelector.push(action, cost, hash, finished = finished, step = 1)
-
-    proc push3(self:var State, parent: int, multiSelector:var Frontier,
-        y1, x1, y2, x2, y3, x3: int) =
-        var action = initAction(y1, x1, y2, x2, y3, x3)
-
-        self.moveForward(action)
-        var hash = self.hash
-        var cost = self.evaluate()
-        var finished = (self.targetBall == M)
-        self.moveBackward(action)
-
-        multiSelector.push(action, cost, hash, finished = finished, step = 2)
+    # 2交換でもActionは1個。stepだけを2にして到着ターンを指定する。
+    template pushTwoSwaps(y1, x1, y2, x2, y3, x3: int) =
+        self.pushCandidate(frontier, initAction(y1, x1, y2, x2, y3, x3), step = 2)
 
     var (y, x) = self.pos[self.targetBall]
     if self.canMoveLeft(y, x):
-        self.push2(parent, multiSelector, y, x, y-1, x-1)
+        pushSwap(y, x, y-1, x-1)
         if self.canMoveLeft(y-1, x-1):
-            self.push3(parent, multiSelector, y-1, x-1, y-2, x-2, y, x)
+            pushTwoSwaps(y-1, x-1, y-2, x-2, y, x)
         if self.canMoveRight(y-1, x-1):
-            self.push3(parent, multiSelector, y-1, x-1, y-2, x-1, y, x)
+            pushTwoSwaps(y-1, x-1, y-2, x-1, y, x)
         if x-1 > 0 and self.b[y-1][x-1]<self.b[y-1][x-2]:   # 真左
-            self.push3(parent, multiSelector, y-1, x-1, y-1, x-2, y, x)
+            pushTwoSwaps(y-1, x-1, y-1, x-2, y, x)
         if y-1 > x-1 and self.b[y-1][x-1]<self.b[y-1][x]:   # 真右
-            self.push3(parent, multiSelector, y-1, x-1, y-1, x, y, x)
+            pushTwoSwaps(y-1, x-1, y-1, x, y, x)
 
     if self.canMoveRight(y, x):
-        self.push2(parent, multiSelector, y, x, y-1, x)
+        pushSwap(y, x, y-1, x)
         if self.canMoveLeft(y-1, x):
-            self.push3(parent, multiSelector, y-1, x, y-2, x-1, y, x)
+            pushTwoSwaps(y-1, x, y-2, x-1, y, x)
         if self.canMoveRight(y-1, x):
-            self.push3(parent, multiSelector, y-1, x, y-2, x, y, x)
+            pushTwoSwaps(y-1, x, y-2, x, y, x)
         if x > 0 and self.b[y-1][x]<self.b[y-1][x-1]:   # 真左
-            self.push3(parent, multiSelector, y-1, x, y-1, x-1, y, x)
+            pushTwoSwaps(y-1, x, y-1, x-1, y, x)
         if y-1 > x and self.b[y-1][x]<self.b[y-1][x+1]:   # 真右
-            self.push3(parent, multiSelector, y-1, x, y-1, x+1, y, x)
+            pushTwoSwaps(y-1, x, y-1, x+1, y, x)
 
     if x > 0 and self.b[y][x]<self.b[y][x-1]:   # 真左
-        self.push2(parent, multiSelector, y, x, y, x-1)
+        pushSwap(y, x, y, x-1)
     if y > x and self.b[y][x]<self.b[y][x+1]:   # 真右
-        self.push2(parent, multiSelector, y, x, y, x+1)
+        pushSwap(y, x, y, x+1)
 
 
-proc getHash(s: State): HashType = s.hash
-
-template expand(s: var State, f: var Frontier) = expand(s, 0, f)
-
-defineSkipTourBeam(skipTourBeam, State, Action, CostType, HashType)
+defineSkipTourBeam(skipTourBeam, State, Action, CostType, HashType, LeafData)
 
 proc solve(initial: State, beamWidth = AhcBeamWidth): SkipTourBeamResult[Action, CostType] =
     skipTourBeam(initial, beamWidth, maxTurns = 2000)

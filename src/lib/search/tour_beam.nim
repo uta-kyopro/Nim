@@ -4,6 +4,10 @@ include ../header
 import ./tour_beam_core
 export tour_beam_core
 
+
+# -------------------------------------------------------------------
+# TourBeamCoreModule 1ターン遷移専用のビームサーチライブラリ(編集しない)
+# -------------------------------------------------------------------
 when not declared TourBeamModule:
     const TourBeamModule* = true
 

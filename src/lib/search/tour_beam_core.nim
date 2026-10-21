@@ -1,8 +1,9 @@
 include ../header
 include ./tour_beam_common
 
-## 経路配列と葉の境界で巡回する1ターン遷移専用ビームサーチ。
-## Stateは1つだけ保持し、候補ごとのコピーや親・兄弟リンクは使わない。
+# -------------------------------------------------------------------
+# TourBeamModule 1ターン遷移専用のビームサーチライブラリ(ユーザー編集範囲)
+# -------------------------------------------------------------------
 when not declared TourBeamCoreModule:
     const TourBeamCoreModule* = true
 
