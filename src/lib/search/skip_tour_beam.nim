@@ -8,6 +8,8 @@ when not declared SkipTourBeamModule:
     const SkipTourBeamModule* = true
 
     type
+        # 評価値は符号付き48bit範囲（-2^47..2^47-1）に収める。中間計算はintでよい。
+        # 通常の整数選抜は幅65,536まで。範囲外への自動切り替えは行わず、debug時だけ確認する。
         CostType* = int
         HashType* = uint64
         LeafData* = object # TODO: 葉ごとに保存し、巡回中の更新を省きたい情報をまとめる。
@@ -65,9 +67,9 @@ when not declared SkipTourBeamModule:
 
     # 編集不要：初期Stateと探索条件をcoreに渡し、最良の行動列を返す。
     template skipTourBeam*(initial: State, beamWidth: int, maxTurns = 2000,
-            minimize = true, groupLimit = 0, groupCount = 0): SkipTourBeamResult[Action, CostType] =
+            minimize = true, groupLimit = 0, groupCount = 0, groupLocalHash = false): SkipTourBeamResult[Action, CostType] =
         runSkipTourBeam[State, Action, CostType, HashType, LeafData](initial, beamWidth,
-            maxTurns, minimize, groupLimit, groupCount)
+            maxTurns, minimize, groupLimit, groupCount, groupLocalHash)
 
 # let answer = skipTourBeam(initialState, beamWidth = 1000, maxTurns = 100)
 # echo answer.score

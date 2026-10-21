@@ -33,24 +33,29 @@ when not declared TourBeamCoreModule:
 
     # 次の1層の候補管理を初期化する。groupLimit > 0なら全体幅の代わりにグループ別選抜を使う。
     proc initTourBeamFrontier*[A, S, K, L](beamWidth: int, minimize = true,
-            groupLimit = 0, groupCount = 0): TourBeamFrontier[A, S, K, L] =
+            groupLimit = 0, groupCount = 0, groupLocalHash = false): TourBeamFrontier[A, S, K, L] =
+        when S is SomeSignedInt:
+            if groupLimit == 0 and beamWidth > TourPackedMaxWidth:
+                raise newException(ValueError, "beamWidth must not exceed 65536 for packed integer scores")
         when defined(debug):
             if beamWidth <= 0: raise newException(ValueError, "beamWidth must be positive")
             if groupLimit < 0 or groupCount < 0 or (groupLimit > 0 and groupCount <= 0):
                 raise newException(ValueError, "invalid group bucket dimensions")
         result.remaining = int.high
         result.selector = TourSelector[A, S, K, L](width: beamWidth, minimize: minimize,
-            groupLimit: groupLimit,
+            groupLimit: groupLimit, groupCount: groupCount, groupLocalHash: groupLocalHash,
             candidates: newSeqOfCap[TourCandidate[A, S, K, L]](if groupLimit > 0: 0 else: beamWidth))
-        if groupLimit > 0:
+        if groupLimit > 0 and groupLocalHash:
+            result.selector.groups.setLen(groupCount)
+        elif groupLimit > 0:
             result.selector.buckets = newSeq[seq[TourCandidate[A, S, K, L]]](groupCount)
         else:
             result.selector.indices = initTourCommonHashMap[K](beamWidth)
 
     # 任意の葉情報を追加しない従来形式のフロンティアを初期化する。
     template initTourBeamFrontier*[A, S, K](beamWidth: int, minimize = true,
-            groupLimit = 0, groupCount = 0): TourBeamFrontier[A, S, K] =
-        initTourBeamFrontier[A, S, K, void](beamWidth, minimize, groupLimit, groupCount)
+            groupLimit = 0, groupCount = 0, groupLocalHash = false): TourBeamFrontier[A, S, K] =
+        initTourBeamFrontier[A, S, K, void](beamWidth, minimize, groupLimit, groupCount, groupLocalHash)
 
     # 現在の展開位置から探索上限までの残りターン数を返す。
     template remainingTurns*[A, S, K, L](frontier: TourBeamFrontier[A, S, K, L]): int =
@@ -60,12 +65,14 @@ when not declared TourBeamCoreModule:
     proc canImprove*[A, S, K, L](frontier: TourBeamFrontier[A, S, K, L], score: S,
             finished = false, group = -1): bool =
         let s = frontier.selector
+        tourCommonCheckScore(score)
         when defined(debug):
-            if s.groupLimit > 0 and (group < 0 or group >= s.buckets.len):
+            if s.groupLimit > 0 and (group < 0 or group >= s.groupCount):
                 raise newException(ValueError, "beam group out of range")
         if frontier.remaining <= 0: return false
         if finished: return not s.hasFinished
-        s.groupLimit > 0 or s.candidates.len < s.width or
+        if s.groupLimit > 0: return s.tourCommonGroupCanImprove(score, group)
+        s.candidates.len < s.width or
             tourCommonBetter(score, s.candidates[s.worst[1]].score, s.minimize)
 
     # 評価済み候補を登録する。leafには遷移後の任意の保存情報を渡す。
@@ -177,11 +184,11 @@ when not declared TourBeamCoreModule:
     # 1ターンずつ経路配列で探索し、終了時だけ最良の行動列を復元する。
     proc runTourBeam*[State, Action, Score, Key, Leaf](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
-            groupCount = 0): TourBeamResult[Action, Score] =
+            groupCount = 0, groupLocalHash = false): TourBeamResult[Action, Score] =
         mixin evaluate, expand, getHash, getLeaf
         when defined(debug):
             if maxTurns < 0: raise newException(ValueError, "maxTurns must be nonnegative")
-        var frontier = initTourBeamFrontier[Action, Score, Key, Leaf](beamWidth, minimize, groupLimit, groupCount)
+        var frontier = initTourBeamFrontier[Action, Score, Key, Leaf](beamWidth, minimize, groupLimit, groupCount, groupLocalHash)
         var tree = TourTree[State, Action](state: initial, leaves: @[0])
         var current: seq[TourCandidate[Action, Score, Key, Leaf]]
         result.score = tree.state.evaluate()
@@ -230,14 +237,14 @@ when not declared TourBeamCoreModule:
     # 任意の葉情報を追加しない従来形式の評価値・Hashで探索する。
     template runTourBeam*[State, Action, Score, Key](initial: State, beamWidth: int,
             maxTurns = 2000, minimize = true, groupLimit = 0,
-            groupCount = 0): TourBeamResult[Action, Score] =
+            groupCount = 0, groupLocalHash = false): TourBeamResult[Action, Score] =
         runTourBeam[State, Action, Score, Key, void](initial, beamWidth,
-            maxTurns, minimize, groupLimit, groupCount)
+            maxTurns, minimize, groupLimit, groupCount, groupLocalHash)
 
     # State・Action・評価値・Hashの型を固定し、指定名の探索関数を定義する。
     template defineTourBeam*(name, State, Action, Score, Key: untyped, Leaf: untyped = void) =
         # 型を固定した1ターン遷移の探索条件をcoreへ渡す。
         template name(initial: State, beamWidth: int, maxTurns = 2000,
-                minimize = true, groupLimit = 0, groupCount = 0): TourBeamResult[Action, Score] =
+                minimize = true, groupLimit = 0, groupCount = 0, groupLocalHash = false): TourBeamResult[Action, Score] =
             runTourBeam[State, Action, Score, Key, Leaf](initial, beamWidth, maxTurns,
-                minimize, groupLimit, groupCount)
+                minimize, groupLimit, groupCount, groupLocalHash)

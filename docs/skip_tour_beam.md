@@ -9,6 +9,11 @@
 skipTour専用の遅延確保はコンパイル時に切り替え、実行時の方式判定は増やさない。
 親・兄弟リンク型の[skipBeam](skip_beam.md)には依存せず、ユーザーのAPIも変わらない。
 固定ビーム幅で動作し、時間計測・時間による打ち切り・可変幅は持たない。
+通常選抜の勝ち抜き木は、符号付き48bitの整数スコアと16bitの候補番号を`uint64`へまとめ、
+候補配列への間接参照を省く。整数スコアは`-2^47..2^47-1`、通常選抜の幅は最大65,536。
+公開Score型は維持し、範囲外への自動切り替えは行わない。スコア範囲は`-d:debug`時だけassertで確認する。
+到達世代ごとに領域を再利用する。設定追加は不要。
+詳細は[tourBeamの選抜器](tour_beam.md)を参照。
 
 ## 方式
 
@@ -67,7 +72,7 @@ for action in answer.actions:
 - `frontier.push(action, score, key, finished = false, step = 1, group = -1)`：遷移後の評価値・Hashで直接登録する。
 - `frontier.canImprove(score, step = 1, finished = false, group = -1)`：Hash計算前に足切りする。
 - `frontier.remainingTurns()`：展開中の状態から世代上限までの残りを返す。
-- `search(initial, beamWidth, maxTurns = 2000, minimize = true, groupLimit = 0, groupCount = 0)`：探索を行う。
+- `search(initial, beamWidth, maxTurns = 2000, minimize = true, groupLimit = 0, groupCount = 0, groupLocalHash = false)`：探索を行う。
 
 `step`は正の消費世代数。上限を超える候補は登録しない。世代ごとの選抜器で独立にHash重複を除き、同じHashなら良い評価の候補へ置き換えられる。
 親は展開中の位置から自動設定する。Hashには将来の遷移に影響する情報を反映する。整数Hashは再ハッシュせず使用するため、差分ZobristHashを推奨する。
@@ -77,6 +82,13 @@ for action in answer.actions:
 `groupCount`はグループ数。ID順に安定ソート・Hash重複除去を行い、先のグループを優先する。
 重複除去には既存の配列Hash表を再利用し、使用済みビットだけを消去する。
 `uint64`のZobristHashは再ハッシュせず使用し、0も有効なキーとして扱う。
+
+同じ到達ターンに登録する同じHashが必ず同じ群に属するなら、`groupLocalHash = true`で
+群ごとの上位K件だけを保持し、群内の最悪スコアでHash取得前に足切りできる。
+同点順序と採用候補は従来と一致し、将来世代の保留にも同じ制限を適用する。
+群別の領域は到達世代ごとに再利用する。保留する候補の親は巡回・親番号更新の対象に含める。
+前提は呼出し側で保証し、同じHashに異なる群を渡す用途では有効にしない。
+詳細と設定例は[tourBeamのグループ選抜](tour_beam.md)を参照。
 
 ## 任意の葉情報
 
